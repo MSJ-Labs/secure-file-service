@@ -1,4 +1,4 @@
-package com.msj.securefile.infrastructure.persistence;
+package com.msj.securefile.shared.infrastructure.persistence;
 
 import java.nio.file.Path;
 
@@ -20,7 +20,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 public final class JooqCodeGenerator {
 
-    public static final String TARGET_PACKAGE = "com.msj.securefile.infrastructure.persistence.jooq";
+    public static final String TARGET_PACKAGE = "com.msj.securefile.shared.infrastructure.persistence.jooq";
 
     // Same major version as docker-compose.yml, so the generated code matches the runtime database.
     private static final String POSTGRES_IMAGE = "postgres:18.6";

@@ -38,7 +38,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs `mvn verify` with JDK 25 on eve
 
 ## Database and jOOQ
 
-The schema lives only in Flyway migrations (`src/main/resources/db/migration`). The jOOQ code generated from it is committed under `com.msj.securefile.infrastructure.persistence.jooq`. After adding a migration, regenerate it (needs Docker) and commit the result:
+The schema lives only in Flyway migrations (`src/main/resources/db/migration`). The jOOQ code generated from it is committed under `com.msj.securefile.shared.infrastructure.persistence.jooq`. After adding a migration, regenerate it (needs Docker) and commit the result:
 
 ```bash
 mvn -Pjooq-codegen generate-sources

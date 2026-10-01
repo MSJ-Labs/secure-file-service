@@ -220,7 +220,7 @@
                 <configuration>
                     <excludes>
                         <!-- jOOQ generated code -->
-                        <exclude>com/msj/securefile/infrastructure/persistence/jooq/**</exclude>
+                        <exclude>com/msj/securefile/shared/infrastructure/persistence/jooq/**</exclude>
                         <!-- MapStruct generated implementations -->
                         <exclude>**/*MapperImpl.class</exclude>
                         <!-- Configuration classes and the Application main class -->
@@ -331,7 +331,7 @@
                                     <arguments>
                                         <argument>-classpath</argument>
                                         <classpath/>
-                                        <argument>src/test/java/com/msj/securefile/infrastructure/persistence/JooqCodeGenerator.java</argument>
+                                        <argument>src/test/java/com/msj/securefile/shared/infrastructure/persistence/JooqCodeGenerator.java</argument>
                                         <argument>src/main/java</argument>
                                     </arguments>
                                 </configuration>

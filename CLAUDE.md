@@ -36,7 +36,7 @@ Unit tests are `*Test`, integration tests are `*IT` (Failsafe, Testcontainers). 
 ## Database rules
 - ALL DDL lives in Flyway migrations (`src/main/resources/db/migration`). Never edit a released migration: add a new one.
 - The app never creates or alters schema.
-- jOOQ generated code is committed under `com.msj.securefile.infrastructure.persistence.jooq` (so the project compiles without Docker). It is regenerated only with the `jooq-codegen` profile. A test fails if it drifts from the migrations. Never edit generated code by hand.
+- jOOQ generated code is committed under `com.msj.securefile.shared.infrastructure.persistence.jooq` (so the project compiles without Docker). It is regenerated only with the `jooq-codegen` profile. A test fails if it drifts from the migrations. Never edit generated code by hand.
 
 ## Coding guidelines
 - Prefer immutable value objects (records) and factory methods that enforce invariants. No anonymous setters on the domain.
