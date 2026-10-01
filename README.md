@@ -21,7 +21,7 @@ You can compile and run the unit tests **without Docker**: the jOOQ code is comm
 # compile (no Docker)
 mvn compile
 
-# start PostgreSQL, MinIO, ClamAV and the app
+# start PostgreSQL, LocalStack (S3), ClamAV and the app
 docker compose up --build
 ```
 
@@ -32,7 +32,9 @@ ClamAV downloads its signatures on first start and takes a couple of minutes to 
 | Command | What it runs | Docker |
 |---|---|---|
 | `mvn test` | Unit tests and ArchUnit architecture rules | no |
-| `mvn verify` | Unit + integration tests (Testcontainers: PostgreSQL, MinIO) and the JaCoCo 80% gate | yes |
+| `mvn verify` | Unit + integration tests (Testcontainers: PostgreSQL, LocalStack S3) and the JaCoCo 80% gate | yes |
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `mvn verify` with JDK 25 on every push and pull request, and uploads the JaCoCo report as the `jacoco-report` artifact (also when the coverage gate fails).
 
 ## Database and jOOQ
 
@@ -48,4 +50,4 @@ mvn -Pjooq-codegen generate-sources
 - `CLAUDE.md`: guidelines and rules for AI-assisted development
 - `PROMPTS.md`: log of the prompts used to build this project
 
-> The Maven profiles and `docker-compose.yml` referenced above are created in the next bootstrap step.
+Copy `.env.example` to `.env` before the first `docker compose up`. If port 5432 is already used on your machine, change `POSTGRES_HOST_PORT` in `.env`. The app listens on `localhost:8080`; only `/actuator/health` is exposed.

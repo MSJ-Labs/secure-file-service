@@ -60,3 +60,46 @@ I am starting a secure file management microservice. This first prompt covers ON
 4. Hexagonal package structure (domain, application, infrastructure) + ArchUnit test.
 5. Domain unit tests first, then pure Java domain (SecureFile, FileStatus, User/UserId) and port interfaces (including FileStoragePort, CurrentUserProvider).
 ~~~~
+
+## Prompt 2 — Build and infrastructure
+
+~~~~text
+Ok Let's move on to the build and infra side. Still no business code and no upload/download endpoints, those come in later prompts.
+
+  As usual, give me a short plan and your questions first, wait for my answer and stop after each step so I can review.
+
+  For the pom, I want Spring Boot 4 with Web MVC and virtual threads, jOOQ, Flyway, PostgreSQL, MapStruct, hypersistence-tsid, Actuator and Lombok. On the test side: JUnit 5, Mockito, ArchUnit and Testcontainers for PostgreSQL and MinIO. Surefire runs the classes with suffix Test and Failsafe the ones with IT suffix, and JaCoCo merges both and fails the build if 80% is not reached. I also need the jooq-codegen profile we described: it starts a Testcontainers PostgreSQL, applies the Flyway migrations and generates the code into the committed package, so that a plain `mvn compile` keeps working without Docker.
+
+  For talking to MinIO, I'm not sure yet which client to use: the AWS SDK v2 or the MinIO Java SDK. I don't know either of them well, so compare them in your plan, especially for streaming uploads of large files (2 GB) when the size isn't known in advance and recommend one. The adapter should work with real S3 later by just changing the config. Also confirm the MinIO image is still available and pin its version.
+
+  About Lombok, I'm fine with it everywhere, but in domain and application only @Getter, @EqualsAndHashCode and @ToString, nothing that bypasses the factory methods (no @Data, @Setter, @Builder,
+  @AllArgsConstructor). Add an ArchUnit rule for that and update CLAUDE.md, since it currently says hypersistence-tsid is the only third-party library allowed in the domain. Watch the MapStruct + Lombok processor
+  order, and tell me if the Lombok version you pick isn't clearly compatible with Java 25.
+
+  For the first Flyway migration I just want the initial schema: files (with owner_id and status), scan jobs (with the lease and retry fields) and the SHA-256 verdict cache. owner_id stays a plain column, no
+  users table, since auth will come later. Follow what ARCHITECTURE.md says about the queue and the cache, and if you think something there should change, say it.
+
+  Then the config. application.properties with datasource, Flyway, virtual threads, S3/MinIO, ClamAV and multipart, everything overridable through environment variables and no secrets in the file, plus an application-local.properties.example. Actuator should expose only health, I need it for the compose healthcheck.
+
+  For docker-compose I want the app, Postgres, MinIO and ClamAV. MinIO buckets should be created at startup, and the services should have healthchecks and wait for each other with service_healthy. The app should wait for Postgres and MinIO (and the bucket creation), but not for ClamAV: it can take minutes to download its signatures, and the queue already handles ClamAV being down. ClamAV needs its config raised for 2 GB (StreamMaxLength, MaxFileSize, MaxScanSize). Add a .env.example too.
+
+  The Dockerfile should be multi-stage, with a layered jar and a non-root user, and JVM flags that make sense in a container: MaxRAMPercentage, and an explicit MaxDirectMemorySize because we're dealing with
+  streams. Add a .dockerignore. Keep it simple and explain your choices in a couple of lines.
+
+  For CI, a GitHub Actions workflow on push and pull request: JDK 25, Maven cache, `mvn verify`, and the JaCoCo report as an artifact. No Sonar for now.
+
+  To finish, complete the .gitignore and update the README and ARCHITECTURE.md wherever they still say "next step".
+
+  Give me the exact versions you pick, and if you're unsure about something with Java 25 or Spring Boot 4, flag it instead of guessing. Don't add things I didn't ask for (no k8s, no observability stack). And
+  before you tell me a step is done, run what you can, like `mvn compile` and `docker compose config`.
+~~~~
+
+## Prompt 2b — MinIO image unavailable (follow-up decision)
+
+~~~~text
+Context: while writing docker-compose.yml, the MinIO image pin requested in prompt 2 turned out to be impossible: `minio/minio` and `quay.io/minio/minio` can no longer be pulled, and `bitnami/minio` was removed from Docker Hub (`bitnamilegacy/minio` still exists but is frozen and unpatched).
+
+Author's decision: first check the Bitnami image, and if it is not usable, switch to LocalStack instead of Garage or RustFS, because Testcontainers and the AWS SDK v2 support it natively and the adapter code does not change. Then "go".
+
+Result: LocalStack `4.14.0` (S3 only) in docker-compose.yml and `testcontainers-localstack` in the pom; ClamAV pinned to `1.4.6-debian` (the Alpine tags have no arm64 build); README, ARCHITECTURE.md and CLAUDE.md updated accordingly.
+~~~~
