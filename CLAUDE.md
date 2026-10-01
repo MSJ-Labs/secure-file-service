@@ -3,7 +3,7 @@
 Secure file management microservice: streamed uploads into a quarantine zone, asynchronous ClamAV scan, download only when the file is CLEAN. See `ARCHITECTURE.md` for the design and `README.md` for setup.
 
 ## Stack
-Java 25, Spring Boot 4 (Spring Web MVC, virtual threads), Maven, PostgreSQL, jOOQ (no JPA/Hibernate), Flyway, MapStruct, MinIO (S3), ClamAV. Exact versions live in `pom.xml` only.
+Java 25, Spring Boot 4 (Spring Web MVC, virtual threads), Maven, PostgreSQL, jOOQ (no JPA/Hibernate), Flyway, MapStruct, S3-compatible storage (AWS SDK v2; LocalStack in compose and tests), ClamAV. Exact versions live in `pom.xml` only.
 
 Base package: `com.msj.securefile` (groupId `com.msj`, artifactId `secure-file-service`). Single Maven module.
 
@@ -16,11 +16,12 @@ Base package: `com.msj.securefile` (groupId `com.msj`, artifactId `secure-file-s
 | Regenerate jOOQ code from Flyway migrations | `mvn -Pjooq-codegen generate-sources` | yes |
 | Run infrastructure + app | `docker compose up --build` | yes |
 
-Unit tests are `*Test`, integration tests are `*IT` (Failsafe, Testcontainers). Commands marked as available are defined in `pom.xml` (step 3 of the bootstrap).
+Unit tests are `*Test`, integration tests are `*IT` (Failsafe, Testcontainers). Maven commands are defined in `pom.xml`.
 
 ## Architecture rules (enforced by ArchUnit at build time)
-- `domain`: pure Java. No Spring, no jOOQ, no MapStruct, no Jakarta, no I/O frameworks. The only third-party library allowed is `hypersistence-tsid`.
+- `domain`: pure Java. No Spring, no jOOQ, no MapStruct, no Jakarta, no I/O frameworks. The only third-party libraries allowed are `hypersistence-tsid` and Lombok, restricted as below.
 - `application`: use cases and ports (in/out interfaces). Depends only on `domain` (and the JDK). No Spring annotations.
+- Lombok: allowed everywhere. In `domain` and `application` only `@Getter`, `@EqualsAndHashCode` and `@ToString`. Never `@Data`, `@Setter`, `@Builder` or `@AllArgsConstructor`/`@NoArgsConstructor`: they bypass the factory methods that enforce invariants. The ArchUnit rule arrives with the package structure (it cannot be written before those packages exist); since Lombok annotations are source-retention, it detects the forbidden generated members through `@lombok.Generated` (see `lombok.config`).
 - `infrastructure`: adapters (web, persistence, storage, scanner, config). May depend on `application` and `domain`. Nothing depends on `infrastructure`.
 - Dependencies point inward only: `infrastructure -> application -> domain`.
 - MapStruct is used in `infrastructure` only. Never map in the domain.
@@ -51,7 +52,7 @@ Unit tests are `*Test`, integration tests are `*IT` (Failsafe, Testcontainers). 
 4. Refactor with tests green.
 
 - Use cases are tested with Mockito on ports. Domain is tested without mocks.
-- Adapters are tested with Testcontainers (PostgreSQL, MinIO).
+- Adapters are tested with Testcontainers (PostgreSQL, LocalStack S3).
 - Coverage: JaCoCo fails the build below 80% instruction coverage (unit + integration merged). Excluded: jOOQ generated code, MapStruct generated implementations, configuration classes, the Application main class.
 
 ## Working rules

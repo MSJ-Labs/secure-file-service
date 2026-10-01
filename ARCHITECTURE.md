@@ -5,12 +5,12 @@
 ```mermaid
 flowchart LR
     C[Client] -->|streamed upload| API[REST API - Spring MVC]
-    API -->|stream + SHA-256| Q[(Quarantine zone - S3/MinIO)]
+    API -->|stream + SHA-256| Q[(Quarantine zone - S3 (LocalStack in dev/tests))]
     API -->|file PENDING + scan job| DB[(PostgreSQL)]
     W[Scan workers] -->|FOR UPDATE SKIP LOCKED| DB
     W -->|read| Q
     W -->|INSTREAM over TCP| AV[ClamAV clamd]
-    W -->|CLEAN: copy| CL[(Clean zone - S3/MinIO)]
+    W -->|CLEAN: copy| CL[(Clean zone - S3 (LocalStack in dev/tests))]
     C -->|download if CLEAN| API
     API --> CL
 ```
@@ -38,7 +38,7 @@ com.msj.securefile
 └── infrastructure    adapters and wiring
     ├── web           Spring MVC controllers, DTOs, MapStruct mappers
     ├── persistence   jOOQ repositories, generated jOOQ code (committed)
-    ├── storage       S3/MinIO adapter
+    ├── storage       S3 (LocalStack in dev/tests) adapter
     ├── scanner       ClamAV INSTREAM client, scan workers
     └── config        Spring configuration
 ```
@@ -112,7 +112,7 @@ Defaults (lease, attempts, backoff) are configuration values.
 
 - **Domain and use cases**: strict TDD. Domain tests without mocks. Use cases with Mockito on ports.
 - **Architecture**: ArchUnit tests run in `mvn test` and fail on boundary violations.
-- **Adapters**: integration tests (`*IT`, Failsafe) with Testcontainers: PostgreSQL (repositories, `SKIP LOCKED`, migrations) and MinIO (storage adapter). ClamAV may be a container or a fake TCP server for protocol tests.
+- **Adapters**: integration tests (`*IT`, Failsafe) with Testcontainers: PostgreSQL (repositories, `SKIP LOCKED`, migrations) and LocalStack S3 (storage adapter, including multipart uploads). ClamAV may be a container or a fake TCP server for protocol tests.
 - **Schema/codegen drift**: a test regenerates from the migrations and compares.
 - **Coverage**: JaCoCo, unit + integration merged, fails below 80% instruction coverage. Excluded: jOOQ generated code, MapStruct generated implementations, configuration classes, the Application main class.
 - `mvn test` needs no Docker. `mvn verify` needs Docker.
@@ -127,6 +127,8 @@ Defaults (lease, attempts, backoff) are configuration values.
 
 ## 11. Infrastructure
 
-Phase 1 (`docker-compose.yml`): app, PostgreSQL, MinIO (pinned image tag), ClamAV (with raised limits).
+Phase 1 (`docker-compose.yml`): app, PostgreSQL, LocalStack S3 (pinned image tag), ClamAV (with raised limits). MinIO was dropped because its public images are no longer pullable; the adapter uses the AWS SDK v2, so real S3 or any S3-compatible server only needs configuration. LocalStack is an emulator: the community edition keeps no data across restarts.
+
+The app image is built in two stages (Maven build, then a JRE-only runtime running as a non-root user) from a layered jar, so a code change rebuilds only the last layer. Defaults in the image: `-XX:MaxRAMPercentage=50`, `-XX:MaxDirectMemorySize=256m` and `-XX:+ExitOnOutOfMemoryError`; compose gives the app 1 GB, so heap 512 MB + direct 256 MB leaves about 250 MB for metaspace, thread stacks and headroom. The app healthcheck uses bash's `/dev/tcp` because the image has no curl.
 
 Planned for a later phase (not implemented): Prometheus, Grafana, Loki and Tempo, plus Micrometer metrics (virtual threads, direct memory, scan duration).
