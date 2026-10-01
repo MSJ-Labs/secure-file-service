@@ -1,4 +1,4 @@
-package com.msj.securefile.infrastructure.persistence;
+package com.msj.securefile.shared.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

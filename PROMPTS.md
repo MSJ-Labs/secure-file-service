@@ -103,3 +103,9 @@ Author's decision: first check the Bitnami image, and if it is not usable, switc
 
 Result: LocalStack `4.14.0` (S3 only) in docker-compose.yml and `testcontainers-localstack` in the pom; ClamAV pinned to `1.4.6-debian` (the Alpine tags have no arm64 build); README, ARCHITECTURE.md and CLAUDE.md updated accordingly.
 ~~~~
+
+## Prompt 3 — Shared module and jOOQ package move
+
+~~~~text
+I added a shared module that contains shared DDD domain classes (aggregate, entity, value object, DomainEvent...) . move the infra pers jooq generated tables under that shared folder (same path infra pers jooq) and do the necessary changes for jooq generated classess config
+~~~~

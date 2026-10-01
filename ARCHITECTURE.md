@@ -60,7 +60,7 @@ IDs are TSIDs (`UserId(TSID value)`), stored as `BIGINT`, generated behind an `I
 
 - PostgreSQL with jOOQ. No JPA/Hibernate.
 - ALL DDL is in Flyway migrations (`src/main/resources/db/migration`).
-- jOOQ code is generated from the migrations against a Testcontainers PostgreSQL and **committed** under `infrastructure.persistence.jooq`. Reason: the project must compile on a machine without Docker. The `jooq-codegen` Maven profile regenerates it (needs Docker). A test checks that the committed code matches the migrations, so drift fails the build. Generated code is excluded from JaCoCo.
+- jOOQ code is generated from the migrations against a Testcontainers PostgreSQL and **committed** under `shared.infrastructure.persistence.jooq`. Reason: the project must compile on a machine without Docker. The `jooq-codegen` Maven profile regenerates it (needs Docker). A test checks that the committed code matches the migrations, so drift fails the build. Generated code is excluded from JaCoCo.
 - MapStruct is used in `infrastructure` only (DTO <-> command, jOOQ record <-> domain).
 
 ## 4. Container-aware JVM and Direct Buffers
