@@ -69,6 +69,14 @@ secrets/
 logs/
 
 # ============================================================
+# Java / Maven / Claude Code
+# ============================================================
+dependency-reduced-pom.xml
+.flattened-pom.xml
+*.hprof
+.claude/settings.local.json
+
+# ============================================================
 # Docker
 # ============================================================
 docker-compose.override.yml
