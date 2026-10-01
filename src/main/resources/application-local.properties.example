@@ -1,0 +1,13 @@
+# Copy to application-local.properties (git-ignored) and run with --spring.profiles.active=local.
+# Values match the defaults of docker-compose.yml / .env.example.
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/securefile
+spring.datasource.username=securefile
+spring.datasource.password=change-me
+
+app.storage.s3.endpoint=http://localhost:9000
+app.storage.s3.access-key=change-me
+app.storage.s3.secret-key=change-me-too
+
+app.scanner.clamav.host=localhost
+app.scanner.clamav.port=3310
