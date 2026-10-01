@@ -1,0 +1,10 @@
+target/
+.git/
+.idea/
+.github/
+.env
+.env.*
+*.md
+docker/
+docker-compose.yml
+src/main/resources/application-local.properties

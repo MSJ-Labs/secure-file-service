@@ -1,0 +1,94 @@
+name: secure-file-service
+
+services:
+  postgres:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible store. MinIO's public images are no longer pullable, hence LocalStack (S3 only).
+  # The community edition keeps no data across container restarts: fine for dev and tests.
+  localstack:
+    image: localstack/localstack:4.14.0
+    environment:
+      SERVICES: s3
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-quarantine}
+      S3_CLEAN_BUCKET: ${S3_CLEAN_BUCKET:-clean}
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - ./docker/localstack/init-buckets.sh:/etc/localstack/init/ready.d/init-buckets.sh:ro
+    healthcheck:
+      # Healthy only once the init script has created both buckets.
+      test: ["CMD-SHELL", "awslocal s3api head-bucket --bucket $${S3_QUARANTINE_BUCKET} && awslocal s3api head-bucket --bucket $${S3_CLEAN_BUCKET}"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  clamav:
+    # -debian: the default Alpine tags have no arm64 build.
+    image: clamav/clamav:1.4.6-debian
+    environment:
+      # Raised above the 2 GB upload limit; clamd may spool the stream in its temp directory.
+      CLAMD_CONF_StreamMaxLength: 2100M
+      CLAMD_CONF_MaxFileSize: 2100M
+      CLAMD_CONF_MaxScanSize: 2100M
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      # First start downloads the signatures, which takes minutes.
+      start_period: 5m
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      # No dependency on clamav: it takes minutes to be ready and the scan queue already handles it being down.
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      S3_ENDPOINT: http://localstack:4566
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set it in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set it in .env}
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-quarantine}
+      S3_CLEAN_BUCKET: ${S3_CLEAN_BUCKET:-clean}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+    # The JVM sizes its heap from this limit (see the Dockerfile): 50% heap + 256 MB direct memory + overhead.
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # The runtime image has no curl or wget, so use bash's /dev/tcp (dash, the default sh, has none).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+volumes:
+  postgres-data:
+  clamav-signatures:
