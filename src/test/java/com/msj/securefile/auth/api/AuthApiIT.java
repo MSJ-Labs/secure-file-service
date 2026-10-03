@@ -132,7 +132,7 @@ class AuthApiIT {
     }
 
     @Test
-    void register_withAnInvalidBody_isABadRequest() throws Exception {
+void register_withAnInvalidBody_isABadRequest() throws Exception {
         String invalid = """
                 {"username":"","email":"not-an-email","password":"short"}""";
 
