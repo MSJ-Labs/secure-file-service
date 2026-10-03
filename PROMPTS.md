@@ -109,3 +109,20 @@ Result: LocalStack `4.14.0` (S3 only) in docker-compose.yml and `testcontainers-
 ~~~~text
 I added a shared module that contains shared DDD domain classes (aggregate, entity, value object, DomainEvent...) . move the infra pers jooq generated tables under that shared folder (same path infra pers jooq) and do the necessary changes for jooq generated classess config
 ~~~~
+
+## Prompt 4 — Authentication module
+
+~~~~text
+I added auth module from another project. Check if there is anyhting needed to update. I have included the flyway migration for users table. update users table in the migration and     
+  rename it to user_account. I have updated the properties files as well to add jwt and some other propeties for logging. update readme to explain how to start the app with generation   
+  the jwt secret. I added required depenecies in the pom.xml, check that too.  check the format and comments for these files.
+~~~~
+
+## Prompt 4b — Authentication review and follow-up decisions
+
+~~~~text
+Decisions taken while integrating and reviewing the auth module (author's answers, in order):
+- Table name: user_account (not app_user). Every bounded context gets its own PostgreSQL schema and nothing lives in public: tables of the file context go to a schema (first "file", renamed to "storage" because "file.file" read badly) and auth tables to "auth". V1 and V2 were edited in place because nothing is deployed yet.
+- jOOQ is generated for both schemas, schema-qualified, no flattening.
+- Controllers and handlers are tested without a heavy context where possible: unit tests with Mockito, adapter ITs on a shared Testcontainers PostgreSQL, and a single @SpringBootTest end-to-end test.
+~~~~

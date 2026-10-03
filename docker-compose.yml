@@ -75,6 +75,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?set it in .env}
       S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-quarantine}
       S3_CLEAN_BUCKET: ${S3_CLEAN_BUCKET:-clean}
+      JWT_SECRET: ${JWT_SECRET:?generate one, see README (Quickstart)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
     # The JVM sizes its heap from this limit (see the Dockerfile): 50% heap + 256 MB direct memory + overhead.

@@ -16,7 +16,8 @@ build/
 *.iws
 *.iml
 *.ipr
-out/
+# Anchored to the root: an unanchored "out/" also ignores the source package auth/application/port/out
+/out/
 
 # ============================================================
 # VS Code
