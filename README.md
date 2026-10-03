@@ -2,7 +2,7 @@
 
 Secure file management microservice: files are uploaded (streamed, up to 2 GB) into a quarantine zone, scanned by ClamAV, and can be downloaded only once they are CLEAN. Each user can only access their own files.
 
-Status: project foundations (architecture, domain, ports). Upload/download endpoints and authentication are not implemented yet. See `ARCHITECTURE.md` for the design.
+Status: authentication (register, login, refresh, logout, current user) is implemented. Upload/download endpoints are not implemented yet. See `ARCHITECTURE.md` for the design.
 
 ## Prerequisites
 
@@ -21,11 +21,53 @@ You can compile and run the unit tests **without Docker**: the jOOQ code is comm
 # compile (no Docker)
 mvn compile
 
-# start PostgreSQL, LocalStack (S3), ClamAV and the app
+# 1. create your .env (git-ignored) from the template
+cp .env.example .env
+
+# 2. generate the JWT signing secret into it (works on macOS and Linux)
+sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')|" .env && rm .env.bak
+
+# 3. start PostgreSQL, LocalStack (S3), ClamAV and the app
 docker compose up --build
 ```
 
-ClamAV downloads its signatures on first start and takes a couple of minutes to become ready.
+The app listens on `http://localhost:8080`. ClamAV downloads its signatures on first start and takes a couple of minutes to become ready; the app does not wait for it.
+
+If port 5432 is already used on your machine, change `POSTGRES_HOST_PORT` in `.env`.
+
+### The JWT secret
+
+`JWT_SECRET` signs the access and refresh tokens (HS512). It must be at least 64 characters, it has no default on purpose, and the app (and `docker compose`) refuses to start without it. Never commit a real value: `.env` and `application-local.properties` are git-ignored. Changing it invalidates every token already issued. `openssl rand -base64 64` prints 88 characters.
+
+`COOKIE_SECURE` defaults to `false` so cookies work over plain HTTP in local development. Set it to `true` behind HTTPS.
+
+### Running the app outside Docker
+
+Start only the infrastructure, then run the app from your IDE or Maven:
+
+```bash
+docker compose up -d postgres localstack clamav
+
+cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
+# edit it: set jwt.secret (openssl rand -base64 64) and make the other values match your .env
+
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+### Trying the authentication
+
+```bash
+# register, then log in (the tokens are returned as HttpOnly cookies, not in the body)
+curl -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"username":"alice","email":"alice@example.com","password":"password123"}'
+curl -c cookies.txt -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"alice","password":"password123"}'
+
+# current user (uses the access_token cookie)
+curl -b cookies.txt localhost:8080/api/v1/users/me
+```
+
+Other endpoints: `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`. Everything except `/api/v1/auth/**`, `/actuator/health` and the OpenAPI documentation (`/swagger-ui/index.html`, `/v3/api-docs`) requires authentication.
 
 ## Tests
 
@@ -49,5 +91,3 @@ mvn -Pjooq-codegen generate-sources
 - `ARCHITECTURE.md`: design, boundaries, scan cache, queue failure handling
 - `CLAUDE.md`: guidelines and rules for AI-assisted development
 - `PROMPTS.md`: log of the prompts used to build this project
-
-Copy `.env.example` to `.env` before the first `docker compose up`. If port 5432 is already used on your machine, change `POSTGRES_HOST_PORT` in `.env`. The app listens on `localhost:8080`; only `/actuator/health` is exposed.

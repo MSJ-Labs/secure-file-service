@@ -10,11 +10,13 @@ import org.jooq.meta.jaxb.ForcedType;
 import org.jooq.meta.jaxb.Generate;
 import org.jooq.meta.jaxb.Generator;
 import org.jooq.meta.jaxb.Jdbc;
+import org.jooq.meta.jaxb.SchemaMappingType;
 import org.jooq.meta.jaxb.Target;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Generates the jOOQ code from the Flyway migrations, against a throwaway PostgreSQL container.
+ * Generates the jOOQ code of every bounded-context schema from the Flyway migrations, against a throwaway
+ * PostgreSQL container.
  * Used by the {@code jooq-codegen} Maven profile (it runs {@link #main}) and by the drift test.
  * It lives in test sources so that Testcontainers never reaches the production classpath.
  */
@@ -56,9 +58,11 @@ public final class JooqCodeGenerator {
                 .withGenerator(new Generator()
                         .withDatabase(new Database()
                                 .withName("org.jooq.meta.postgres.PostgresDatabase")
-                                .withInputSchema("public")
-                                .withOutputSchemaToDefault(true)
-                                .withExcludes("flyway_schema_history")
+                                // One schema per bounded context, nothing in public. Kept in the output
+                                // (no "default schema" flattening) so every query is schema-qualified.
+                                .withSchemata(
+                                        new SchemaMappingType().withInputSchema("storage"),
+                                        new SchemaMappingType().withInputSchema("auth"))
                                 // The application works with Instant (injected Clock), not OffsetDateTime.
                                 .withForcedTypes(new ForcedType()
                                         .withName("INSTANT")

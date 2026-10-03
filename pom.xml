@@ -28,6 +28,8 @@
         <hypersistence-tsid.version>2.1.4</hypersistence-tsid.version>
         <archunit.version>1.5.1</archunit.version>
         <awssdk.version>2.55.8</awssdk.version>
+        <jjwt.version>0.13.0</jjwt.version>
+        <springdoc.version>3.1.1</springdoc.version>
         <jacoco.version>0.8.15</jacoco.version>
         <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
 
@@ -102,6 +104,40 @@
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>${mapstruct.version}</version>
+        </dependency>
+
+        <!-- Authentication: Spring Security, request validation, JWT -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- OpenAPI documentation (springdoc 3.x is the line for Spring Boot 4) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- Tests -->
@@ -224,7 +260,7 @@
                         <!-- MapStruct generated implementations -->
                         <exclude>**/*MapperImpl.class</exclude>
                         <!-- Configuration classes and the Application main class -->
-                        <exclude>com/msj/securefile/infrastructure/config/**</exclude>
+                        <exclude>com/msj/securefile/config/**</exclude>
                         <exclude>com/msj/securefile/SecureFileServiceApplication.class</exclude>
                     </excludes>
                 </configuration>

@@ -1,11 +1,14 @@
 # Copy to application-local.properties (git-ignored) and run with --spring.profiles.active=local.
 # Values match the defaults of docker-compose.yml / .env.example.
+# Generate a secret with: openssl rand -base64 64
 
-spring.datasource.url=jdbc:postgresql://localhost:5432/securefile
-spring.datasource.username=securefile
-spring.datasource.password=change-me
+jwt.secret=REPLACE_WITH_YOUR_SECRET
 
-app.storage.s3.endpoint=http://localhost:9000
+spring.datasource.url=jdbc:postgresql://localhost:5432/training
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+
+app.storage.s3.endpoint=http://localhost:4566
 app.storage.s3.access-key=change-me
 app.storage.s3.secret-key=change-me-too
 

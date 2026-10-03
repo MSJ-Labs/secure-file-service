@@ -29,28 +29,46 @@ Any other transition is rejected by the domain. Download is allowed only in `CLE
 
 ## 2. Hexagonal boundaries
 
+The layout is feature-first: one package per bounded context, each split in the hexagonal layers.
+
 ```
 com.msj.securefile
-├── domain            pure Java: SecureFile, FileStatus, User/UserId, domain exceptions
-├── application       use cases + ports (in and out), no framework
-│   ├── port.in
-│   └── port.out      FileStoragePort, CurrentUserProvider, ...
-└── infrastructure    adapters and wiring
-    ├── web           Spring MVC controllers, DTOs, MapStruct mappers
-    ├── persistence   jOOQ repositories, generated jOOQ code (committed)
-    ├── storage       S3 (LocalStack in dev/tests) adapter
-    ├── scanner       ClamAV INSTREAM client, scan workers
-    └── config        Spring configuration
+├── auth                          implemented: registration, login, refresh, logout, profile
+│   ├── domain                    pure Java: User aggregate, UserId, token hashing, domain exceptions
+│   ├── application               command/query handlers, result objects (UserProfile)
+│   │   └── port.out              UserRepository, RefreshTokenRepository, PasswordHasher, TokenService
+│   ├── api                       inbound web adapter: controllers, DTOs, AuthExceptionHandler
+│   └── infrastructure
+│       ├── adapters.persistence  jOOQ repositories
+│       └── security              JWT provider, cookies, filter, BCrypt hasher
+├── storage                       planned (file upload, quarantine, scan): same layers
+├── shared
+│   ├── domain                    DDD building blocks: AggregateRoot, Entity, ValueObject, DomainEvent
+│   └── infrastructure.persistence.jooq   generated jOOQ code (committed), one package per schema
+└── config                        Spring configuration (security, OpenAPI, Clock)
 ```
 
-Rules (ArchUnit, see `CLAUDE.md`):
-- `domain` depends on neither Spring nor jOOQ (nor any framework). Only `hypersistence-tsid` is allowed.
-- `application` depends only on `domain`.
-- `infrastructure` depends inward. Nothing depends on `infrastructure`.
+The handlers are the inbound API of the application layer: controllers call them directly, so there are no `*UseCase` interfaces (a single implementation per operation, no second adapter that needs the abstraction). Handlers return result objects, never domain entities. The outbound side is ports (`port.out`) implemented by infrastructure: persistence, password hashing and token issuing are all behind interfaces owned by `application`.
+
+Rules (ArchUnit, `ArchitectureTest`, see `CLAUDE.md`):
+- `domain` depends on neither Spring nor jOOQ (nor any framework). Only `hypersistence-tsid` and Lombok (restricted) are allowed.
+- `application` depends only on `domain`, plus `@Service` and `@Transactional` from Spring and SLF4J. Moving those two annotations out would need a wiring class per handler and a hand-made transaction proxy (including the `noRollbackFor` of the login, which must keep failed attempts), for no gain in testability: handlers are tested with plain constructors and Mockito.
+- `domain` and `application` never depend on `infrastructure`, `api` or `config`. jOOQ types stay in `infrastructure`.
+- No Lombok builder or setter in `domain` and `application`; aggregates use factory methods (`register`, `reconstitute`).
 
 Ports:
-- `FileStoragePort`: two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based (write with a known digest computation, read as `InputStream`, move quarantine -> clean, delete). The domain has no notion of buckets: the adapter maps zones to buckets or prefixes.
-- `CurrentUserProvider`: returns the caller's `UserId`. Authentication (JWT in HttpOnly SameSite=Strict `access_token` and `refresh_token` cookies) is added later as an adapter. Until then a test stub is used.
+- `FileStoragePort` (planned): two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based (write with a known digest computation, read as `InputStream`, move quarantine -> clean, delete). The domain has no notion of buckets: the adapter maps zones to buckets or prefixes.
+- `CurrentUserProvider` (planned, file context): returns the caller's `UserId` from the authenticated principal.
+
+Authentication: JWT (HS512) in HttpOnly SameSite=Strict `access_token` and `refresh_token` cookies. Refresh tokens are stored as hashes and can be revoked. Five failed logins lock the account for 30 minutes. Unknown user, disabled account and wrong password return the same 401 (`Invalid credentials`); domain exceptions carry fixed messages and `AuthExceptionHandler` maps them to RFC 9457 problem details. The clock is injected (`Clock` bean, UTC) and handed to the domain as a parameter.
+
+Refresh: `POST /api/v1/auth/refresh` checks the JWT signature and expiry, then that the stored hash is neither revoked nor expired, then loads the account: a missing, disabled or locked account gets no new access token, and the roles of the new token come from the account, not from the refresh token. Only the access token is renewed.
+
+Known limits of the authentication (accepted for now):
+- Refresh tokens are not rotated: a stolen one stays usable until it expires (7 days) or the user logs out. Rotation needs reuse detection and handling of concurrent refreshes.
+- `revokeAllByUserId` exists but nothing calls it yet; it becomes useful with password change or account disabling.
+- Swagger UI and `/v3/api-docs` are public.
+- Registration checks then inserts: two concurrent registrations of the same username are stopped by the unique constraint (a 500 instead of a 409 in that race).
 
 Ownership: `SecureFile` carries its `owner: UserId`. Repositories and use cases always query with the caller's identity, so a foreign file is indistinguishable from a missing one (no IDOR).
 
@@ -59,7 +77,7 @@ IDs are TSIDs (`UserId(TSID value)`), stored as `BIGINT`, generated behind an `I
 ## 3. Persistence
 
 - PostgreSQL with jOOQ. No JPA/Hibernate.
-- ALL DDL is in Flyway migrations (`src/main/resources/db/migration`).
+- ALL DDL is in Flyway migrations (`src/main/resources/db/migration`). One schema per bounded context (`storage` for files and scans, `auth` for accounts and tokens), nothing in `public`. The contexts do not reference each other: a file's `owner_id` is a plain column, not a foreign key to `auth`.
 - jOOQ code is generated from the migrations against a Testcontainers PostgreSQL and **committed** under `shared.infrastructure.persistence.jooq`. Reason: the project must compile on a machine without Docker. The `jooq-codegen` Maven profile regenerates it (needs Docker). A test checks that the committed code matches the migrations, so drift fails the build. Generated code is excluded from JaCoCo.
 - MapStruct is used in `infrastructure` only (DTO <-> command, jOOQ record <-> domain).
 
@@ -123,7 +141,7 @@ Defaults (lease, attempts, backoff) are configuration values.
 - Scan workers scale independently of the API: any number of workers can consume the same queue thanks to `SKIP LOCKED`. Concurrency per worker is bounded (memory/direct buffers).
 - ClamAV scales by running several clamd instances behind a TCP load balancer. Each uses a lot of RAM for signatures, and scans are CPU-bound.
 - Object storage scales independently (S3-compatible).
-- PostgreSQL is the coordination point: index the queue on (status, next_attempt_at), keep job rows small, and purge finished jobs.
+- PostgreSQL is the coordination point: index the queue with partial indexes (`next_attempt_at` where `state = 'PENDING'`, `lease_expires_at` where `state = 'LEASED'`) so they only hold live jobs, keep job rows small, and purge finished jobs.
 
 ## 11. Infrastructure
 
