@@ -76,7 +76,7 @@ Other endpoints: `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`. Eve
 | `mvn test` | Unit tests and ArchUnit architecture rules | no |
 | `mvn verify` | Unit + integration tests (Testcontainers: PostgreSQL, LocalStack S3) and the JaCoCo 80% gate | yes |
 
-GitHub Actions (`.github/workflows/ci.yml`) runs `mvn verify` with JDK 25 on every push and pull request, and uploads the JaCoCo report as the `jacoco-report` artifact (also when the coverage gate fails).
+GitHub Actions (`.github/workflows/ci.yml`) runs `mvn verify` with JDK 25 on every push and pull request, and uploads the JaCoCo report as the `jacoco-report` artifact (also when the coverage gate fails). On pushes to `main` and on pull requests into `main`, the same build also sends the analysis to SonarCloud (`mvn verify sonar:sonar`, project `MSJ-Labs_secure-file-service`); it needs the `SONAR_TOKEN` repository secret and the project's "Automatic Analysis" switched off in SonarCloud. Other branches and pull requests from forks (no access to the secret) only run `mvn verify`. To run it by hand: `SONAR_TOKEN=... mvn verify sonar:sonar`.
 
 ## Database and jOOQ
 
