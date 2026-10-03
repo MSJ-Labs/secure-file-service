@@ -4,6 +4,9 @@
 package com.msj.securefile.shared.infrastructure.persistence.jooq;
 
 
+import com.msj.securefile.shared.infrastructure.persistence.jooq.auth.Auth;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.Storage;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -26,9 +29,14 @@ public class DefaultCatalog extends CatalogImpl {
     public static final DefaultCatalog DEFAULT_CATALOG = new DefaultCatalog();
 
     /**
-     * standard public schema
+     * The schema <code>auth</code>.
      */
-    public final DefaultSchema DEFAULT_SCHEMA = DefaultSchema.DEFAULT_SCHEMA;
+    public final Auth AUTH = Auth.AUTH;
+
+    /**
+     * The schema <code>storage</code>.
+     */
+    public final Storage STORAGE = Storage.STORAGE;
 
     /**
      * No further instances allowed
@@ -40,7 +48,8 @@ public class DefaultCatalog extends CatalogImpl {
     @Override
     public final List<Schema> getSchemas() {
         return Arrays.asList(
-            DefaultSchema.DEFAULT_SCHEMA
+            Auth.AUTH,
+            Storage.STORAGE
         );
     }
 
