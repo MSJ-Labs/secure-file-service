@@ -16,6 +16,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ANALYZE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,16 +36,18 @@ jobs:
           key: ${{ runner.os }}-sonar
 
       # Unit tests, integration tests (Testcontainers, Docker is available on the runner) and the 80% coverage gate.
-      # SonarCloud analysis runs in the same build (one test run, not two). It needs the SONAR_TOKEN secret, which
-      # pull requests from forks do not get: those run the build alone.
-      - name: Build and test
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+      # SonarCloud analysis runs in the same build (one test run, not two), only for pushes to main and pull requests
+      # into main. Pull requests from forks do not get the SONAR_TOKEN secret: they, and every other branch, run the
+      # build alone.
+      - name: Build, test and analyze
+        if: ${{ env.ANALYZE == 'true' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn --batch-mode --no-transfer-progress verify sonar:sonar
 
-      - name: Build and test (fork pull request, no analysis)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      - name: Build and test
+        if: ${{ env.ANALYZE != 'true' }}
         run: mvn --batch-mode --no-transfer-progress verify
 
       # Also uploaded when the build fails, which is when the report is most useful (for example, the coverage gate).
