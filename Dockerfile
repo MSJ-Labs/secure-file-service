@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Build: compile, package and split the Spring Boot jar into layers -------
-FROM maven:3.9-eclipse-temurin-25 AS build
+FROM maven:3-eclipse-temurin-24 AS build
 WORKDIR /workspace
 
 # Dependencies first: this layer is rebuilt only when the pom changes.
