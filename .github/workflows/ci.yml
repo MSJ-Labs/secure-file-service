@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Pushes to a branch with an open PR are covered by the pull_request run: listing them here would test twice.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
