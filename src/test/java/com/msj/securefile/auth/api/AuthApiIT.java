@@ -139,6 +139,10 @@ class AuthApiIT {
         HttpResponse<String> response = post("/api/v1/auth/register", invalid, Map.of());
 
         assertThat(response.statusCode()).isEqualTo(400);
+        // The rejected fields are named, their values (a password) are not echoed back
+        assertThat(response.body())
+                .contains("\"field\":\"username\"", "\"field\":\"email\"", "\"field\":\"password\"")
+                .doesNotContain("not-an-email", "\"short\"");
     }
 
     // ----- login -----------------------------------------------------------------------------------------------

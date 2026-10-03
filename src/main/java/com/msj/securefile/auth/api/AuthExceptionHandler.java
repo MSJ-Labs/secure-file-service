@@ -8,8 +8,11 @@ import com.msj.securefile.auth.domain.user.UserNotFoundException;
 import com.msj.securefile.auth.domain.user.UsernameAlreadyExistsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
 
 /**
  * Maps authentication failures to RFC 9457 problem details.
@@ -37,6 +40,16 @@ public class AuthExceptionHandler {
     @ExceptionHandler(AccountLockedException.class)
     ProblemDetail locked(AccountLockedException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.LOCKED, e.getMessage());
+    }
+
+    // Names the rejected fields and why, never the rejected values (a password could be among them).
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    ProblemDetail invalidRequest(MethodArgumentNotValidException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request content.");
+        problem.setProperty("errors", e.getBindingResult().getFieldErrors().stream()
+                .map(error -> Map.of("field", error.getField(), "message", String.valueOf(error.getDefaultMessage())))
+                .toList());
+        return problem;
     }
 
     // The caller holds a valid token for an account that no longer exists
