@@ -55,6 +55,6 @@ public class AuthExceptionHandler {
     // The caller holds a valid token for an account that no longer exists
     @ExceptionHandler(UserNotFoundException.class)
     ProblemDetail userNotFound(UserNotFoundException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "User not found");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
     }
 }
