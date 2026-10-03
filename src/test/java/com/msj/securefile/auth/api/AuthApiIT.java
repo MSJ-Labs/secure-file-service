@@ -55,8 +55,8 @@ class AuthApiIT {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> get(String path, Map<String, String> cookies) throws IOException, InterruptedException {
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET();
+    private HttpResponse<String> getMe(Map<String, String> cookies) throws IOException, InterruptedException {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/me")).GET();
         addCookies(request, cookies);
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
@@ -192,7 +192,7 @@ class AuthApiIT {
         String username = registerUser();
         Map<String, String> cookies = loginAs(username);
 
-        HttpResponse<String> response = get("/api/v1/users/me", Map.of("access_token", cookies.get("access_token")));
+        HttpResponse<String> response = getMe(Map.of("access_token", cookies.get("access_token")));
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"username\":\"" + username + "\"");
@@ -200,12 +200,12 @@ class AuthApiIT {
 
     @Test
     void me_withoutCredentials_isUnauthorized() throws Exception {
-        assertThat(get("/api/v1/users/me", Map.of()).statusCode()).isEqualTo(401);
+        assertThat(getMe(Map.of()).statusCode()).isEqualTo(401);
     }
 
     @Test
     void me_withAForgedToken_isUnauthorized() throws Exception {
-        assertThat(get("/api/v1/users/me", Map.of("access_token", "not.a.jwt")).statusCode()).isEqualTo(401);
+        assertThat(getMe(Map.of("access_token", "not.a.jwt")).statusCode()).isEqualTo(401);
     }
 
     // ----- refresh and logout ----------------------------------------------------------------------------------
