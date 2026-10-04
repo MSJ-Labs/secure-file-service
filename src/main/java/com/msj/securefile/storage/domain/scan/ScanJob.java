@@ -2,6 +2,7 @@ package com.msj.securefile.storage.domain.scan;
 
 import com.msj.securefile.shared.domain.AggregateRoot;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
+import com.msj.securefile.storage.domain.scan.event.*;
 import com.msj.securefile.storage.domain.scan.exception.InvalidScanJobTransitionException;
 import com.msj.securefile.storage.domain.scan.exception.LeaseLostException;
 import com.msj.securefile.storage.domain.scan.exception.LeaseNotExpiredException;
@@ -51,7 +52,9 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         if (fileId == null) throw new IllegalArgumentException("File is required");
         if (queue == null) throw new IllegalArgumentException("Queue is required");
 
-        return new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, now, now);
+        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, now, now);
+        job.registerEvent(new ScanJobCreated(id, fileId, queue, now));
+        return job;
     }
 
     /**
@@ -69,6 +72,8 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         this.leaseOwner = worker;
         this.leaseExpiresAt = now.plus(lease);
         this.updatedAt = now;
+        // Failed attempts so far plus this one: a release did not consume an attempt.
+        registerEvent(new ScanClaimed(id(), fileId, worker, attempts + 1, leaseExpiresAt, now));
     }
 
     /**
@@ -91,6 +96,7 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         this.leaseOwner = null;
         this.leaseExpiresAt = null;
         this.updatedAt = now;
+        registerEvent(new ScanJobCompleted(id(), fileId, worker, now));
     }
 
     /**
@@ -102,7 +108,7 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         if (policy == null) throw new IllegalArgumentException("The retry policy is required");
         requireOwner(worker);
 
-        return recordFailedAttempt(error.trim(), now, policy);
+        return recordFailedAttempt(worker, error.trim(), ScanFailureCause.REPORTED, now, policy);
     }
 
     /**
@@ -115,11 +121,13 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         if (state != ScanJobState.LEASED) throw new InvalidScanJobTransitionException(state, ScanJobState.PENDING);
         if (now.isBefore(leaseExpiresAt)) throw new LeaseNotExpiredException();
 
-        return recordFailedAttempt(LEASE_EXPIRED_ERROR, now, policy);
+        return recordFailedAttempt(leaseOwner, LEASE_EXPIRED_ERROR, ScanFailureCause.LEASE_EXPIRED, now, policy);
     }
 
-    // Shared by a reported failure and an expired lease: both consume an attempt and free the job.
-    private ScanFailureOutcome recordFailedAttempt(String error, Instant now, ScanRetryPolicy policy) {
+    // Shared by a reported failure and an expired lease: both consume an attempt and free the job. The worker is the
+    // one that held the lease, kept for the history since the lease is cleared here.
+    private ScanFailureOutcome recordFailedAttempt(WorkerId worker, String error, ScanFailureCause cause,
+                                                   Instant now, ScanRetryPolicy policy) {
         this.attempts++;
         this.lastError = error;
         this.leaseOwner = null;
@@ -127,10 +135,12 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         this.updatedAt = now;
         if (policy.isExhausted(attempts)) {
             this.state = ScanJobState.DONE;
+            registerEvent(new ScanAbandoned(id(), fileId, worker, attempts, cause, error, now));
             return ScanFailureOutcome.EXHAUSTED;
         }
         this.state = ScanJobState.PENDING;
         this.nextAttemptAt = now.plus(policy.backoff(attempts));
+        registerEvent(new ScanRetryScheduled(id(), fileId, worker, attempts, cause, error, nextAttemptAt, now));
         return ScanFailureOutcome.RETRY_SCHEDULED;
     }
 
@@ -147,6 +157,7 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         this.leaseOwner = null;
         this.leaseExpiresAt = null;
         this.updatedAt = now;
+        registerEvent(new ScanReleased(id(), fileId, worker, nextAttemptAt, now));
     }
 
     public Optional<String> getLastError() {
