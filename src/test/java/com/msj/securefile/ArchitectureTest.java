@@ -1,5 +1,6 @@
 package com.msj.securefile;
 
+import com.msj.securefile.shared.domain.ValueObject;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -54,4 +55,16 @@ class ArchitectureTest {
     static final ArchRule domainHasNoGeneratedConstructors = constructors()
             .that().areDeclaredInClassesThat().resideInAPackage("..domain..")
             .should().notBeAnnotatedWith(LOMBOK_GENERATED);
+
+    // Both directions: a valueobject package holds true value objects only, and a value object lives there.
+    @ArchTest
+    static final ArchRule valueObjectPackagesHoldValueObjectsOnly = classes()
+            .that().resideInAPackage("..valueobject..")
+            .should().implement(ValueObject.class);
+
+    @ArchTest
+    static final ArchRule valueObjectsLiveInAValueObjectPackage = classes()
+            .that().implement(ValueObject.class)
+            .and().areNotInterfaces()
+            .should().resideInAPackage("..valueobject..");
 }
