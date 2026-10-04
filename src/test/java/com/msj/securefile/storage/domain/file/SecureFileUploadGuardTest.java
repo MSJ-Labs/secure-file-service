@@ -1,0 +1,61 @@
+package com.msj.securefile.storage.domain.file;
+
+import com.msj.securefile.storage.domain.file.exception.FileNotUploadableException;
+import com.msj.securefile.storage.domain.file.valueobject.FileId;
+import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
+import com.msj.securefile.storage.domain.file.valueobject.Sha256;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.time.Instant;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class SecureFileUploadGuardTest {
+
+    private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
+    private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
+
+    private static SecureFile uploading() {
+        return SecureFile.initiate(FileId.of(42L), OwnerId.of(7L), "report.pdf", 1_000, NOW, NOW.plusSeconds(3_600));
+    }
+
+    private static SecureFile pending() {
+        SecureFile file = uploading();
+        file.completeUpload(DIGEST, 1_000, NOW);
+        return file;
+    }
+
+    private static SecureFile scanning() {
+        SecureFile file = pending();
+        file.startScan(NOW);
+        return file;
+    }
+
+    // Stored content is immutable: once the upload ended, in any way, nothing may write to the file again.
+    private static Stream<SecureFile> filesThatMustNotReceiveContent() {
+        SecureFile uploadFailed = uploading();
+        uploadFailed.failUpload(UploadFailureReason.ABORTED, NOW);
+        SecureFile clean = scanning();
+        clean.markClean(NOW);
+        SecureFile infected = scanning();
+        infected.markInfected("Win.Test.EICAR_HDB-1", NOW);
+        SecureFile scanFailed = scanning();
+        scanFailed.failScan(NOW);
+        return Stream.of(uploadFailed, pending(), scanning(), clean, infected, scanFailed);
+    }
+
+    @Test
+    void ensureUploadable_acceptsAFileWhoseUploadIsInProgress() {
+        assertThatCode(() -> uploading().ensureUploadable()).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @MethodSource("filesThatMustNotReceiveContent")
+    void ensureUploadable_refusesAnyFileThatIsNotUploading(SecureFile file) {
+        assertThatThrownBy(file::ensureUploadable).isInstanceOf(FileNotUploadableException.class);
+    }
+}

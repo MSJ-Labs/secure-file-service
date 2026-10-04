@@ -2,6 +2,8 @@ package com.msj.securefile.storage.domain.file;
 
 import com.msj.securefile.shared.domain.AggregateRoot;
 import com.msj.securefile.storage.domain.file.event.*;
+import com.msj.securefile.storage.domain.file.exception.FileNotDownloadableException;
+import com.msj.securefile.storage.domain.file.exception.FileNotUploadableException;
 import com.msj.securefile.storage.domain.file.exception.InvalidFileTransitionException;
 import com.msj.securefile.storage.domain.file.exception.UploadSizeMismatchException;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
@@ -156,6 +158,22 @@ public class SecureFile extends AggregateRoot<FileId> {
         this.status = FileStatus.UPLOAD_FAILED;
         this.updatedAt = now;
         registerEvent(new UploadFailed(id(), reason, now));
+    }
+
+    /**
+     * Stored content is immutable: only a file whose upload is in progress may receive a body. Anything else would
+     * let a caller overwrite a file that is already stored, scanned or published.
+     */
+    public void ensureUploadable() {
+        if (status != FileStatus.UPLOADING) throw new FileNotUploadableException();
+    }
+
+    /**
+     * The central safety rule of the service: only a file the scan cleared may leave the quarantine. Every other
+     * status, including a failed scan, keeps the content locked.
+     */
+    public void ensureDownloadable() {
+        if (status != FileStatus.CLEAN) throw new FileNotDownloadableException();
     }
 
     public Optional<Sha256> getSha256() {
