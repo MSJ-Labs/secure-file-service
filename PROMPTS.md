@@ -126,3 +126,29 @@ Decisions taken while integrating and reviewing the auth module (author's answer
 - jOOQ is generated for both schemas, schema-qualified, no flattening.
 - Controllers and handlers are tested without a heavy context where possible: unit tests with Mockito, adapter ITs on a shared Testcontainers PostgreSQL, and a single @SpringBootTest end-to-end test.
 ~~~~
+
+## Prompt 5 — File upload and scan module
+
+~~~~text
+We start now the file upload/scan module.
+
+- http flow : I am thinking of using a semaphore to limit concurrent uploads (otherwise return error). Implement very short transactions: a first one creates the file metadata (status UPLOADING), then direct streaming to s3/quarantine outside any transaction, then a second one sets the status to pending and creates the scan job. Never keep a db connection open during the streaming.
+
+- For workers and scan, fast reservation usign SKIP LOCKED (status scanning, lease unitil now + 30s (or even better if the duration is dynamic and relative to file size, what do you think?)). Then commit immediately.
+ALso, clamAV should scan outside of transation with a regular check extending the lease. Worker should check if it is still the owner of the scan via compare and set (CLEAN or INFECTED). No long sql lock (no for update).
+
+-  Domain and application layers must reamin pure with no spring annotation nor framework dependency.
+Shceduled tasks and spring profile management (web and workers) live together in the infrastucture layer.
+
+- performances : I would like to implement an adaptive PoolThreadExecutor to limit the number of threads to not exceed the max possible number of simultanious processing.
+The check for new files to scan should be exponential so at night when there is no activity, the worker wont process useless checks. The second it finds a new file, it goes back to 0s.
+Isolate small and large file scan in seperate queues so no one blocks the other.
+Gracefull shutdown to release leases when the containers stops.
+
+
+To get started with this step, I'd like us to move forward step by step.
+~~~~
+
+### Decisions (author's answers)
+- Scan lease: 30 s, renewed by a heartbeat, so it does not depend on the file size. The upload deadline is different: nothing renews it while the body streams, so it grows with the declared size (base delay + size / minimum rate, both configurable).
+- scan_job gets a `queue` column (SMALL / LARGE) in a new migration; scan concurrency is capped per queue by configuration and workers claim only when a slot is free.
