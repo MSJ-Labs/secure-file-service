@@ -43,6 +43,10 @@
         <jacoco.ut.exec>${project.build.directory}/jacoco-ut.exec</jacoco.ut.exec>
         <jacoco.it.exec>${project.build.directory}/jacoco-it.exec</jacoco.it.exec>
         <jacoco.merged.exec>${project.build.directory}/jacoco-merged.exec</jacoco.merged.exec>
+        <!-- Empty defaults: without them a test launched outside the Maven lifecycle (IDE) gets the literal "@{...}"
+             as JVM argument. The JaCoCo prepare-agent goals override them during a build. -->
+        <jacoco.ut.argLine />
+        <jacoco.it.argLine />
 
         <!-- SonarCloud (run from CI with the sonar goal). Same exclusions as the JaCoCo gate: generated jOOQ code,
              Spring configuration and the main class. Adapters and controllers are NOT excluded: integration tests cover them. -->
