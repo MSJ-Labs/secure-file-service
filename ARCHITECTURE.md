@@ -6,7 +6,7 @@
 flowchart LR
     C[Client] -->|streamed upload| API[REST API - Spring MVC]
     API -->|stream + SHA-256| Q[(Quarantine zone - S3 (LocalStack in dev/tests))]
-    API -->|file PENDING + scan job| DB[(PostgreSQL)]
+    API -->|file UPLOADING, then PENDING + scan job| DB[(PostgreSQL)]
     W[Scan workers] -->|FOR UPDATE SKIP LOCKED| DB
     W -->|read| Q
     W -->|INSTREAM over TCP| AV[ClamAV clamd]
@@ -15,17 +15,21 @@ flowchart LR
     API --> CL
 ```
 
-File status state machine: `PENDING -> SCANNING -> CLEAN | INFECTED | FAILED`.
+File status state machine (one global status, implemented in `SecureFile`):
+`UPLOADING -> PENDING -> SCANNING -> CLEAN | INFECTED | SCAN_FAILED`, plus `UPLOADING -> UPLOAD_FAILED`.
 
 | Transition | Trigger |
 |---|---|
+| (creation) -> UPLOADING | The row is created first, in a short transaction, with an upload deadline; the binary is streamed afterwards |
+| UPLOADING -> PENDING | Body stored, digest known, real size equals the declared size; the scan job is created in the same transaction |
+| UPLOADING -> UPLOAD_FAILED | Timeout, client abort, storage error or wrong size (the reason is kept) |
 | PENDING -> SCANNING | A worker leases the scan job |
 | SCANNING -> CLEAN | ClamAV verdict OK (or a valid cached CLEAN verdict) |
-| SCANNING -> INFECTED | ClamAV found a signature (or cached INFECTED verdict) |
-| SCANNING -> FAILED | Attempts exhausted (see section 8) |
-| SCANNING -> PENDING | Lease expired (dead worker) or ClamAV unavailable, job requeued |
+| SCANNING -> INFECTED | ClamAV found a signature (or cached INFECTED verdict); the signature name is kept |
+| SCANNING -> SCAN_FAILED | Attempts exhausted (see section 8) |
+| SCANNING -> PENDING | ClamAV unavailable, worker shutdown or lease expired: job requeued |
 
-Any other transition is rejected by the domain. Download is allowed only in `CLEAN`.
+Any other transition is rejected by the domain (`InvalidFileTransitionException`) and records nothing. `CLEAN`, `INFECTED` and `SCAN_FAILED` are final for the automatic processing. Download is allowed only in `CLEAN`.
 
 ## 2. Hexagonal boundaries
 
@@ -41,7 +45,8 @@ com.msj.securefile
 │   └── infrastructure
 │       ├── adapters.persistence  jOOQ repositories
 │       └── security              JWT provider, cookies, filter, BCrypt hasher
-├── storage                       planned (file upload, quarantine, scan): same layers
+├── storage                       file upload, quarantine, scan: domain implemented (see "Storage domain" below);
+│                                 application, infrastructure and api are planned
 ├── shared
 │   ├── domain                    DDD building blocks: AggregateRoot, Entity, ValueObject, DomainEvent
 │   └── infrastructure.persistence.jooq   generated jOOQ code (committed), one package per schema
@@ -55,10 +60,11 @@ Rules (ArchUnit, `ArchitectureTest`, see `CLAUDE.md`):
 - `application` depends only on `domain`, plus `@Service` and `@Transactional` from Spring and SLF4J. Moving those two annotations out would need a wiring class per handler and a hand-made transaction proxy (including the `noRollbackFor` of the login, which must keep failed attempts), for no gain in testability: handlers are tested with plain constructors and Mockito.
 - `domain` and `application` never depend on `infrastructure`, `api` or `config`. jOOQ types stay in `infrastructure`.
 - No Lombok builder or setter in `domain` and `application`; aggregates use factory methods (`register`, `reconstitute`).
+- A `valueobject` package holds only classes that implement `shared.domain.ValueObject`, and every such class lives in a `valueobject` package (storage today; `auth` still has to follow).
 
 Ports:
 - `FileStoragePort` (planned): two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based (write with a known digest computation, read as `InputStream`, move quarantine -> clean, delete). The domain has no notion of buckets: the adapter maps zones to buckets or prefixes.
-- `CurrentUserProvider` (planned, file context): returns the caller's `UserId` from the authenticated principal.
+- `CurrentUserProvider` (planned, file context): returns the caller as an `OwnerId`. The adapter in `infrastructure` translates the authenticated principal, so the storage context does not depend on `auth`.
 
 Authentication: JWT (HS512) in HttpOnly SameSite=Strict `access_token` and `refresh_token` cookies. Refresh tokens are stored as hashes and can be revoked. Five failed logins lock the account for 30 minutes. Unknown user, disabled account and wrong password return the same 401 (`Invalid credentials`); domain exceptions carry fixed messages and `AuthExceptionHandler` maps them to RFC 9457 problem details. The clock is injected (`Clock` bean, UTC) and handed to the domain as a parameter.
 
@@ -70,9 +76,30 @@ Known limits of the authentication (accepted for now):
 - Swagger UI and `/v3/api-docs` are public.
 - Registration checks then inserts: two concurrent registrations of the same username are stopped by the unique constraint (a 500 instead of a 409 in that race).
 
-Ownership: `SecureFile` carries its `owner: UserId`. Repositories and use cases always query with the caller's identity, so a foreign file is indistinguishable from a missing one (no IDOR).
+Ownership: `SecureFile` carries its `owner: OwnerId` (the storage context's own type, no dependency on `auth`). Repositories and use cases always query with the caller's identity, so a foreign file is indistinguishable from a missing one (no IDOR).
 
-IDs are TSIDs (`UserId(TSID value)`), stored as `BIGINT`, generated behind an `IdGenerator` port, exposed as strings in the API.
+IDs are TSIDs (`UserId`, `FileId`, `OwnerId`, `ScanJobId` wrap a `TSID`), stored as `BIGINT`, generated by the application behind an `IdGenerator` port (never a database sequence or auto-increment), exposed as strings in the API.
+
+### Storage domain (implemented, pure Java)
+
+```
+storage/domain/file/               SecureFile (aggregate), FileStatus, UploadFailureReason, UploadTimeoutPolicy
+storage/domain/file/valueobject/   FileId, OwnerId, Sha256 (only true value objects: ArchUnit checks both ways)
+storage/domain/file/event/         FileEvent (sealed) and its 8 records
+storage/domain/file/exception/     InvalidFileTransitionException, UploadSizeMismatchException
+storage/domain/scan/               ScanJob (aggregate), ScanJobState, ScanQueue, ScanFailureCause, ScanFailureOutcome,
+                                   ScanRetryPolicy, ScanQueuePolicy
+storage/domain/scan/valueobject/   ScanJobId, WorkerId
+storage/domain/scan/event/         ScanJobEvent (sealed) and its 6 records
+storage/domain/scan/exception/     LeaseLostException, InvalidScanJobTransitionException, ScanJobNotDueException,
+                                   LeaseNotExpiredException
+```
+
+- `SecureFile` and `ScanJob` are separate aggregates, linked by `FileId`. Both are created by a factory method and every transition takes `now` as a parameter.
+- **Scan job lease**: fixed 30 s (configurable), renewed by a heartbeat, so it does not depend on the file size. Only the owner (`WorkerId`) can renew, complete, fail or release the job; any other worker gets `LeaseLostException` and must drop its result. A reported failure and an expired lease consume an attempt; a `release` (ClamAV down, shutdown) does not. `ScanJob.fail` and `reclaimExpired` return a `ScanFailureOutcome` (`RETRY_SCHEDULED` or `EXHAUSTED`) and the caller applies it to the file (`requeueScan` or `failScan`).
+- **Policies** are immutable records configured from outside: `UploadTimeoutPolicy` (upload deadline = base delay + size / minimum rate, because nothing renews it while the body streams), `ScanRetryPolicy` (max attempts, exponential backoff capped by a maximum), `ScanQueuePolicy` (a file of at most the threshold goes to the `SMALL` queue, a larger one to `LARGE`; the threshold is a hypothesis to calibrate with measured scan durations).
+- **Audit events**: every successful transition records exactly one typed event; a refused transition records nothing; the heartbeat records nothing. See section 12.
+- Dates in the storage domain are `Instant` (stored as `TIMESTAMPTZ`).
 
 ## 3. Persistence
 
@@ -96,6 +123,8 @@ IDs are TSIDs (`UserId(TSID value)`), stored as `BIGINT`, generated behind an `I
 - Avoid framework abstractions that spool the whole request to memory or disk (for example, standard multipart handling into a temporary file). The upload must read the servlet input stream directly.
 - S3 `PutObject` needs a known length, so streaming an unknown-length body uses **multipart upload** with fixed-size parts. Memory use is `part size x concurrent uploads`.
 - Failures abort the multipart upload and remove partial objects. The file never becomes visible in status `PENDING` unless the upload fully succeeded and the digest is known.
+- Row first: TX1 creates the file (`UPLOADING`, with its upload deadline), the body streams outside any transaction (no database connection held), then TX2 moves the file to `PENDING` and creates the scan job. A reaper fails the `UPLOADING` files past their deadline (`UPLOAD_FAILED`); a late TX2 is then refused by the status check. Chosen over "stream first, insert after" because the in-flight state stays visible and recoverable and it keeps room for presigned uploads and idempotency keys.
+- Concurrency of uploads is bounded per instance by a non-blocking semaphore (`tryAcquire`, otherwise `429`/`503` with `Retry-After`), plus a lower per-user cap (planned, not implemented).
 - The worker streams quarantine object -> ClamAV `INSTREAM` (chunks prefixed by a 4-byte length, terminated by a zero-length chunk) over TCP. The connection has connect/read timeouts.
 - ClamAV limits must exceed the largest file: `StreamMaxLength`, `MaxFileSize` and `MaxScanSize` are raised to cover 2 GB. clamd may spool the stream to its temp directory, so that volume must have enough disk space.
 - Reverse proxy and Tomcat limits (request size, timeouts) must be aligned with 2 GB.
@@ -111,20 +140,21 @@ Cache table keyed by SHA-256, storing the verdict, the signature DB version and 
 
 ## 7. Scan job queue
 
-- A scan job row is created in PostgreSQL in the same transaction that marks the file `PENDING`.
-- Workers claim jobs with `SELECT ... FOR UPDATE SKIP LOCKED` (no contention, horizontally scalable, no broker needed). The claim sets the lease owner and expiry, and the file moves to `SCANNING`.
+- A scan job row is created in PostgreSQL in the same transaction that marks the file `PENDING`. The job goes to the `SMALL` or `LARGE` queue (`ScanQueuePolicy`), each served by its own workers, so a large scan never delays the small ones.
+- Workers claim jobs with `SELECT ... FOR UPDATE SKIP LOCKED` (no contention, horizontally scalable, no broker needed) and commit immediately: the claim sets the lease owner and expiry, and the file moves to `SCANNING`. ClamAV then scans outside any transaction while a heartbeat extends the lease; no row lock is held during the scan. On completion the worker applies its verdict with a compare-and-set on the lease owner.
+- Runtime (planned, not implemented): `web` and `worker` Spring profiles in the same jar, scheduling and profile wiring in `infrastructure`; a bounded executor per queue (a worker claims only when a slot is free); an exponential polling delay that falls back to zero as soon as a job is found; graceful shutdown that releases the leases.
 
 ## 8. Queue failure handling
 
 | Case | Behaviour |
 |---|---|
-| Worker dies mid-scan | The job has a **lease** (default 5 minutes) extended by heartbeat while streaming. When the lease expires, a reaper puts the job back to `PENDING` and increments the attempt counter. |
-| Scan fails (I/O, timeout, protocol error) | Retry with exponential backoff (`next_attempt_at`). **Max 3 attempts**, then the file becomes `FAILED`. |
-| ClamAV is down or unreachable | This is infrastructure trouble, not a file problem: the job returns to `PENDING` **without consuming an attempt**, with a backoff, and the worker pauses claiming jobs (circuit-breaker style) until clamd answers `PING`. Files are not marked `FAILED` because of an outage. |
-| Duplicate execution | Idempotent: the verdict is applied only if the job lease still belongs to the worker (fenced by lease owner). |
-| Manual recovery | `FAILED` is terminal for automatic processing. Requeue is a manual operation (to be specified later). |
+| Worker dies mid-scan | The job has a **lease** (default 30 s, heartbeat about every 10 s). When the lease expires, a reaper (`ScanJob.reclaimExpired`) puts the job back to `PENDING` and **consumes an attempt**: a file that kills its worker must not be retried forever. The former owner can no longer renew or complete. |
+| Scan fails (I/O, timeout, protocol error) | The worker reports it (`ScanJob.fail`): retry with exponential backoff (`next_attempt_at`, a job is not claimable before it is due). **Max 3 attempts**, then the job is `DONE`, the file becomes `SCAN_FAILED` and the last error is kept. |
+| ClamAV is down or unreachable | This is infrastructure trouble, not a file problem: the job is released (`ScanJob.release`) **without consuming an attempt**, with a delay, and the worker pauses claiming jobs (circuit-breaker style) until clamd answers `PING`. Files are not marked `SCAN_FAILED` because of an outage. A worker that shuts down releases its job with no delay. |
+| Duplicate execution | Idempotent: the verdict is applied only if the job lease still belongs to the worker (fenced by `WorkerId`, which must be unique per process start). |
+| Manual recovery | `SCAN_FAILED` is terminal for automatic processing. Requeue is a manual operation (to be specified later). |
 
-Defaults (lease, attempts, backoff) are configuration values.
+Defaults (lease, attempts, backoff, queue threshold, upload deadline) are configuration values; the numbers are working hypotheses (for example a 50 MiB threshold between the `SMALL` and `LARGE` queues) to calibrate with a load test.
 
 ## 9. Testing strategy
 
@@ -150,3 +180,16 @@ Phase 1 (`docker-compose.yml`): app, PostgreSQL, LocalStack S3 (pinned image tag
 The app image is built in two stages (Maven build, then a JRE-only runtime running as a non-root user) from a layered jar, so a code change rebuilds only the last layer. Defaults in the image: `-XX:MaxRAMPercentage=50`, `-XX:MaxDirectMemorySize=256m` and `-XX:+ExitOnOutOfMemoryError`; compose gives the app 1 GB, so heap 512 MB + direct 256 MB leaves about 250 MB for metaspace, thread stacks and headroom. The app healthcheck uses bash's `/dev/tcp` because the image has no curl.
 
 Planned for a later phase (not implemented): Prometheus, Grafana, Loki and Tempo, plus Micrometer metrics (virtual threads, direct memory, scan duration).
+
+## 12. Audit trail (history of file changes)
+
+Requirement: the history of every change to a file is kept; nothing is overwritten without a trace. The tables `file` and `scan_job` hold the **current state**; the history is a separate append-only table. This is an audit log, not event sourcing: the state is never rebuilt from the events.
+
+Domain (implemented): `SecureFile` records one `FileEvent` per transition and `ScanJob` one `ScanJobEvent` (both `sealed` hierarchies, so the code that writes them is checked by the compiler). Every event carries the `fileId`, so the whole history of a file, upload and scan attempts together, is one query. The heartbeat is not a transition and records nothing (it would write a row every few seconds for no audit value).
+
+Persistence (planned, not implemented yet):
+- One table `storage.file_event` for both aggregates: `id` (TSID, generated by the application), `aggregate_type`, `aggregate_id`, `sequence`, `file_id`, `event_type`, `occurred_at`, `actor_type`, `actor_id`, `payload` (JSONB with only the fields specific to the event type; never file content or secrets). Index on `(file_id, sequence)`; unique `(aggregate_type, aggregate_id, sequence)`.
+- No auto-increment or sequence query. Each aggregate carries a `version` (number of events so far, 0 at creation). At save time the adapter computes in memory `new version = loaded version + number of events`, updates the state with `UPDATE ... SET version = new WHERE id = ? AND version = loaded` (optimistic lock, 0 rows means a concurrent change), and inserts the events with sequences `loaded + 1 .. new` in one batch. No extra read, batch friendly. A claim done in SQL (`UPDATE ... RETURNING`) increments `version` in the same statement.
+- Events are written in the same transaction as the state change, so history and state cannot diverge. The actor (owner, worker, reaper) is added by the handler when it stores the event: the aggregate does not know who calls it.
+- The table is immutable by design; enforcing it in the database (no `UPDATE`/`DELETE` privilege, or a trigger) and a retention policy (archiving or partitioning by date) are to be decided.
+- File content is immutable: a new upload is a new file, never an overwrite of the stored object. Deletion will be logical. S3 versioning is not used: the audit concerns state changes, not copies of the bytes.
