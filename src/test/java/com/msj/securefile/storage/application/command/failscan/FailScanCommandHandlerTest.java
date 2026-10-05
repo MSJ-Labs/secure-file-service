@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.failscan;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.FileStatus;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,7 @@ class FailScanCommandHandlerTest {
     private static final FileId FILE_ID = FileId.of(42L);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final WorkerId WORKER = WorkerId.of("worker-1");
+    private static final Actor ACTOR = new Actor.Worker(WORKER);
     private static final String ERROR = "clamd timed out";
     private static final ScanRetryPolicy RETRYING = new ScanRetryPolicy(3, Duration.ofSeconds(10), Duration.ofMinutes(5));
     private static final ScanRetryPolicy ONE_SHOT = new ScanRetryPolicy(1, Duration.ofSeconds(10), Duration.ofMinutes(5));
@@ -83,14 +86,14 @@ class FailScanCommandHandlerTest {
         handlerWith(RETRYING).handle(new FailScanCommand(JOB_ID, WORKER, ERROR));
 
         ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture());
+        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
         assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.PENDING);
         assertThat(savedJob.getValue().getAttempts()).isEqualTo(1);
         assertThat(savedJob.getValue().getNextAttemptAt()).isEqualTo(NOW.plus(RETRYING.backoff(1)));
         assertThat(savedJob.getValue().getLastError()).contains(ERROR);
 
         ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture());
+        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
         assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.PENDING);
     }
 
@@ -102,11 +105,11 @@ class FailScanCommandHandlerTest {
         handlerWith(ONE_SHOT).handle(new FailScanCommand(JOB_ID, WORKER, ERROR));
 
         ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture());
+        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
         assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.DONE);
 
         ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture());
+        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
         assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.SCAN_FAILED);
     }
 
@@ -117,8 +120,8 @@ class FailScanCommandHandlerTest {
         assertThatThrownBy(() -> handlerWith(RETRYING).handle(new FailScanCommand(JOB_ID, WORKER, ERROR)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any());
-        verify(fileRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
+        verify(fileRepository, never()).save(any(), any());
     }
 
     @Test
@@ -128,6 +131,6 @@ class FailScanCommandHandlerTest {
         assertThatThrownBy(() -> handlerWith(RETRYING).handle(new FailScanCommand(JOB_ID, WORKER, ERROR)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

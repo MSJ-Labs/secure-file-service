@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.reapuploads;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.domain.file.FileStatus;
 import com.msj.securefile.storage.domain.file.SecureFile;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -32,6 +34,8 @@ class ReapExpiredUploadsCommandHandlerTest {
     private static final Instant NOW = STARTED.plusSeconds(7_200);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final OwnerId OWNER = OwnerId.of(7L);
+    // The reaper acts for nobody: the audit trail records the system itself.
+    private static final Actor ACTOR = new Actor.System();
     private static final int BATCH_SIZE = 50;
 
     @Mock FileRepository fileRepository;
@@ -55,7 +59,7 @@ class ReapExpiredUploadsCommandHandlerTest {
         handler.handle(new ReapExpiredUploadsCommand(BATCH_SIZE));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository, times(2)).save(saved.capture());
+        verify(fileRepository, times(2)).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getAllValues()).allSatisfy(file -> {
             assertThat(file.getStatus()).isEqualTo(FileStatus.UPLOAD_FAILED);
             assertThat(file.getFailureReason()).contains(UploadFailureReason.TIMEOUT);
@@ -80,6 +84,6 @@ class ReapExpiredUploadsCommandHandlerTest {
         int reaped = handler.handle(new ReapExpiredUploadsCommand(BATCH_SIZE));
 
         assertThat(reaped).isZero();
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

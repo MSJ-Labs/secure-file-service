@@ -13,7 +13,8 @@ import java.util.Optional;
  */
 public interface ScanJobRepository {
 
-    void save(ScanJob job);
+    // Writes the state and the audit events of the changes in the same transaction; the actor is recorded with each event.
+    void save(ScanJob job, Actor actor);
 
     // The oldest PENDING job of the queue that is due. The adapter locks the row (SKIP LOCKED) until the end of the
     // transaction, so two workers never get the same job.

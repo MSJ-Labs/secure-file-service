@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.renewlease;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
 import com.msj.securefile.storage.domain.scan.ScanJob;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +38,7 @@ class RenewScanLeaseCommandHandlerTest {
     private static final Duration LEASE = Duration.ofSeconds(30);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final WorkerId WORKER = WorkerId.of("worker-1");
+    private static final Actor ACTOR = new Actor.Worker(WORKER);
 
     @Mock ScanJobRepository scanJobRepository;
 
@@ -59,7 +62,7 @@ class RenewScanLeaseCommandHandlerTest {
         handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE));
 
         ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture());
+        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getLeaseExpiresAt()).contains(NOW.plus(LEASE));
         assertThat(saved.getValue().getLeaseOwner()).contains(WORKER);
     }
@@ -71,7 +74,7 @@ class RenewScanLeaseCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
     }
 
     @Test
@@ -82,6 +85,6 @@ class RenewScanLeaseCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
     }
 }

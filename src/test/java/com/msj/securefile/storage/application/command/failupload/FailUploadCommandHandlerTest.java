@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.failupload;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.domain.file.FileStatus;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +38,7 @@ class FailUploadCommandHandlerTest {
     private static final Instant NOW = STARTED.plusSeconds(30);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);
 
     @Mock FileRepository fileRepository;
@@ -60,7 +63,7 @@ class FailUploadCommandHandlerTest {
         handler.handle(new FailUploadCommand(FILE_ID, UploadFailureReason.SIZE_MISMATCH));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getStatus()).isEqualTo(FileStatus.UPLOAD_FAILED);
         assertThat(saved.getValue().getFailureReason()).contains(UploadFailureReason.SIZE_MISMATCH);
         assertThat(saved.getValue().getUpdatedAt()).isEqualTo(NOW);
@@ -74,7 +77,7 @@ class FailUploadCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new FailUploadCommand(FILE_ID, UploadFailureReason.ABORTED)))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 
     @Test
@@ -87,6 +90,6 @@ class FailUploadCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new FailUploadCommand(FILE_ID, UploadFailureReason.STORAGE_ERROR)))
                 .isInstanceOf(InvalidFileTransitionException.class);
 
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

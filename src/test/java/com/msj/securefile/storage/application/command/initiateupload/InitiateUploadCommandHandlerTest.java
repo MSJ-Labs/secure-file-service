@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.initiateupload;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.IdGenerator;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class InitiateUploadCommandHandlerTest {
@@ -36,6 +38,8 @@ class InitiateUploadCommandHandlerTest {
     // 60 s + 1 MiB at 1 MiB/s = 61 s: round numbers for the deadline assertion.
     private static final UploadTimeoutPolicy POLICY = new UploadTimeoutPolicy(Duration.ofSeconds(60), 1_048_576);
     private static final OwnerId OWNER = OwnerId.of(7L);
+    // The audit trail records who started the upload: the caller.
+    private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);
 
     @Mock FileRepository fileRepository;
@@ -57,7 +61,7 @@ class InitiateUploadCommandHandlerTest {
         handler.handle(new InitiateUploadCommand("report.pdf", 1_048_576));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         SecureFile file = saved.getValue();
         assertThat(file.id()).isEqualTo(FILE_ID);
         assertThat(file.getOwner()).isEqualTo(OWNER);
@@ -75,7 +79,7 @@ class InitiateUploadCommandHandlerTest {
         handler.handle(new InitiateUploadCommand("report.pdf", 1_048_576));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getUploadExpiresAt()).isEqualTo(NOW.plusSeconds(61));
     }
 
@@ -98,6 +102,6 @@ class InitiateUploadCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new InitiateUploadCommand(" ", 10)))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.releasescan;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.SecureFile;
@@ -35,7 +36,8 @@ public class ReleaseScanCommandHandler {
                 .orElseThrow(SecureFileNotFoundException::new);
         file.requeueScan(now);
 
-        scanJobRepository.save(job);
-        fileRepository.save(file);
+        Actor actor = new Actor.Worker(command.worker());
+        scanJobRepository.save(job, actor);
+        fileRepository.save(file, actor);
     }
 }

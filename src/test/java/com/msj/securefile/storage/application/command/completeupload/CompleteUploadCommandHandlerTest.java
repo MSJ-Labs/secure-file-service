@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.completeupload;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.IdGenerator;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,8 @@ class CompleteUploadCommandHandlerTest {
     // Round threshold so that 1_000 is SMALL and 1_001 is LARGE.
     private static final ScanQueuePolicy QUEUE_POLICY = new ScanQueuePolicy(1_000);
     private static final OwnerId OWNER = OwnerId.of(7L);
+    // Both the file and its new scan job are written on behalf of the caller.
+    private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
@@ -78,7 +82,7 @@ class CompleteUploadCommandHandlerTest {
         handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getStatus()).isEqualTo(FileStatus.PENDING);
         assertThat(saved.getValue().getSha256()).contains(DIGEST);
         assertThat(saved.getValue().getUpdatedAt()).isEqualTo(NOW);
@@ -92,7 +96,7 @@ class CompleteUploadCommandHandlerTest {
         handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000));
 
         ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture());
+        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().id()).isEqualTo(JOB_ID);
         assertThat(saved.getValue().getFileId()).isEqualTo(FILE_ID);
         assertThat(saved.getValue().getQueue()).isEqualTo(ScanQueue.SMALL);
@@ -107,7 +111,7 @@ class CompleteUploadCommandHandlerTest {
         handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_001));
 
         ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture());
+        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getQueue()).isEqualTo(ScanQueue.LARGE);
     }
 
@@ -120,8 +124,8 @@ class CompleteUploadCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000)))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
-        verify(fileRepository, never()).save(any());
-        verify(scanJobRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
+        verify(scanJobRepository, never()).save(any(), any());
     }
 
     @Test
@@ -133,7 +137,7 @@ class CompleteUploadCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000)))
                 .isInstanceOf(InvalidFileTransitionException.class);
 
-        verify(fileRepository, never()).save(any());
-        verify(scanJobRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
+        verify(scanJobRepository, never()).save(any(), any());
     }
 }
