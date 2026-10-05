@@ -1,6 +1,7 @@
 package com.msj.securefile.auth.infrastructure.security;
 
 import com.msj.securefile.auth.application.port.out.TokenService;
+import com.msj.securefile.auth.domain.user.UserId;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,18 +34,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-            String username = jwtTokenProvider.getUsernameFromToken(token);
-            Set<String> roles = jwtTokenProvider.getRolesFromToken(token);
-
-            UserPrincipal principal = new UserPrincipal(username, roles);
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-            auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            // A token without the user id (issued before it was carried) cannot say who the caller is: no authentication.
+            jwtTokenProvider.getUserIdFromToken(token).ifPresent(userId -> authenticate(request, token, userId));
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void authenticate(HttpServletRequest request, String token, UserId userId) {
+        String username = jwtTokenProvider.getUsernameFromToken(token);
+        Set<String> roles = jwtTokenProvider.getRolesFromToken(token);
+
+        UserPrincipal principal = new UserPrincipal(userId, username, roles);
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     private String resolveToken(HttpServletRequest request) {

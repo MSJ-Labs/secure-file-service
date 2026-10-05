@@ -50,6 +50,6 @@ public class RefreshTokenCommandHandler {
         }
 
         log.info("Refreshing access token for user: {}", user.getUsername());
-        return tokenService.generateAccessToken(user.getUsername(), user.getRoles());
+        return tokenService.generateAccessToken(user.getId(), user.getUsername(), user.getRoles());
     }
 }

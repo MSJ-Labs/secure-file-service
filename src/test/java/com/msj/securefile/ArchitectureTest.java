@@ -39,6 +39,17 @@ class ArchitectureTest {
             .that().resideInAnyPackage("..domain..", "..application..")
             .should().dependOnClassesThat().resideInAnyPackage("..infrastructure..", "..api..", "..config..");
 
+    // The bounded contexts only meet through the shared kernel: neither knows the other.
+    @ArchTest
+    static final ArchRule storageDoesNotDependOnAuth = noClasses()
+            .that().resideInAPackage("com.msj.securefile.storage..")
+            .should().dependOnClassesThat().resideInAPackage("com.msj.securefile.auth..");
+
+    @ArchTest
+    static final ArchRule authDoesNotDependOnStorage = noClasses()
+            .that().resideInAPackage("com.msj.securefile.auth..")
+            .should().dependOnClassesThat().resideInAPackage("com.msj.securefile.storage..");
+
     @ArchTest
     static final ArchRule jooqStaysInInfrastructure = noClasses()
             .that().resideOutsideOfPackage("..infrastructure..")
