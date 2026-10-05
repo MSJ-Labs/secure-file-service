@@ -39,14 +39,19 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
     private final Instant createdAt;
     private Instant updatedAt;
 
-    private SecureFile(FileId id, OwnerId owner, String name, long declaredSize, FileStatus status,
-                       Instant uploadExpiresAt, Instant createdAt, Instant updatedAt, long version) {
+    // The one constructor: every field is set here, so no instance exists half built. Both factories go through it.
+    private SecureFile(FileId id, OwnerId owner, String name, long declaredSize, FileStatus status, Sha256 sha256,
+                       Instant uploadExpiresAt, UploadFailureReason failureReason, String infectionSignature,
+                       Instant createdAt, Instant updatedAt, long version) {
         super(id, version);
         this.owner = owner;
         this.name = name;
         this.declaredSize = declaredSize;
         this.status = status;
+        this.sha256 = sha256;
         this.uploadExpiresAt = uploadExpiresAt;
+        this.failureReason = failureReason;
+        this.infectionSignature = infectionSignature;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -65,8 +70,8 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
             throw new IllegalArgumentException("The upload deadline must be in the future");
         }
 
-        SecureFile file = new SecureFile(id, owner, trimmed, declaredSize, FileStatus.UPLOADING,
-                uploadExpiresAt, now, now, 0L);
+        SecureFile file = new SecureFile(id, owner, trimmed, declaredSize, FileStatus.UPLOADING, null,
+                uploadExpiresAt, null, null, now, now, 0L);
         file.registerEvent(new FileUploadStarted(id, owner, trimmed, declaredSize, now));
         return file;
     }
@@ -78,12 +83,8 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
                                           FileStatus status, Sha256 sha256, Instant uploadExpiresAt,
                                           UploadFailureReason failureReason, String infectionSignature,
                                           Instant createdAt, Instant updatedAt, long version) {
-        SecureFile file = new SecureFile(id, owner, name, declaredSize, status, uploadExpiresAt,
-                createdAt, updatedAt, version);
-        file.sha256 = sha256;
-        file.failureReason = failureReason;
-        file.infectionSignature = infectionSignature;
-        return file;
+        return new SecureFile(id, owner, name, declaredSize, status, sha256, uploadExpiresAt,
+                failureReason, infectionSignature, createdAt, updatedAt, version);
     }
 
     /**

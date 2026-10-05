@@ -5,6 +5,7 @@ package com.msj.securefile.shared.infrastructure.persistence.jooq.storage;
 
 
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.FileEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanJob;
 
 import org.jooq.Index;
@@ -23,7 +24,9 @@ public class Indexes {
     // INDEX definitions
     // -------------------------------------------------------------------------
 
+    public static final Index IDX_FILE_EVENT_FILE_OCCURRED = Internal.createIndex(DSL.name("idx_file_event_file_occurred"), FileEvent.FILE_EVENT, new OrderField[] { FileEvent.FILE_EVENT.FILE_ID, FileEvent.FILE_EVENT.OCCURRED_AT }, false);
     public static final Index IDX_FILE_OWNER_CREATED = Internal.createIndex(DSL.name("idx_file_owner_created"), File.FILE, new OrderField[] { File.FILE.OWNER_ID, File.FILE.CREATED_AT.desc() }, false);
-    public static final Index IDX_SCAN_JOB_CLAIMABLE = Internal.createIndex(DSL.name("idx_scan_job_claimable"), ScanJob.SCAN_JOB, new OrderField[] { ScanJob.SCAN_JOB.NEXT_ATTEMPT_AT }, false);
+    public static final Index IDX_FILE_UPLOAD_EXPIRY = Internal.createIndex(DSL.name("idx_file_upload_expiry"), File.FILE, new OrderField[] { File.FILE.UPLOAD_EXPIRES_AT }, false);
+    public static final Index IDX_SCAN_JOB_CLAIMABLE = Internal.createIndex(DSL.name("idx_scan_job_claimable"), ScanJob.SCAN_JOB, new OrderField[] { ScanJob.SCAN_JOB.QUEUE, ScanJob.SCAN_JOB.NEXT_ATTEMPT_AT }, false);
     public static final Index IDX_SCAN_JOB_LEASE_EXPIRY = Internal.createIndex(DSL.name("idx_scan_job_lease_expiry"), ScanJob.SCAN_JOB, new OrderField[] { ScanJob.SCAN_JOB.LEASE_EXPIRES_AT }, false);
 }

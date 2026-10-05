@@ -1,6 +1,5 @@
 package com.msj.securefile.storage.application.command.renewlease;
 
-import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.scan.ScanJob;
 import com.msj.securefile.storage.domain.scan.exception.LeaseLostException;
@@ -28,6 +27,6 @@ public class RenewScanLeaseCommandHandler {
 
         job.renew(command.worker(), clock.instant(), command.lease());
 
-        scanJobRepository.save(job, new Actor.Worker(command.worker()));
+        scanJobRepository.renewLease(job);
     }
 }

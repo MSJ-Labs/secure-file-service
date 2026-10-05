@@ -84,12 +84,32 @@ public class File extends TableImpl<FileRecord> {
     /**
      * The column <code>storage.file.sha256</code>.
      */
-    public final TableField<FileRecord, String> SHA256 = createField(DSL.name("sha256"), SQLDataType.CHAR(64).nullable(false), this, "");
+    public final TableField<FileRecord, String> SHA256 = createField(DSL.name("sha256"), SQLDataType.CHAR(64), this, "");
 
     /**
      * The column <code>storage.file.status</code>.
      */
     public final TableField<FileRecord, String> STATUS = createField(DSL.name("status"), SQLDataType.VARCHAR(16).nullable(false), this, "");
+
+    /**
+     * The column <code>storage.file.upload_expires_at</code>.
+     */
+    public final TableField<FileRecord, Instant> UPLOAD_EXPIRES_AT = createField(DSL.name("upload_expires_at"), SQLDataType.INSTANT.nullable(false), this, "");
+
+    /**
+     * The column <code>storage.file.failure_reason</code>.
+     */
+    public final TableField<FileRecord, String> FAILURE_REASON = createField(DSL.name("failure_reason"), SQLDataType.VARCHAR(32), this, "");
+
+    /**
+     * The column <code>storage.file.infection_signature</code>.
+     */
+    public final TableField<FileRecord, String> INFECTION_SIGNATURE = createField(DSL.name("infection_signature"), SQLDataType.VARCHAR(255), this, "");
+
+    /**
+     * The column <code>storage.file.version</code>.
+     */
+    public final TableField<FileRecord, Long> VERSION = createField(DSL.name("version"), SQLDataType.BIGINT.nullable(false), this, "");
 
     /**
      * The column <code>storage.file.created_at</code>.
@@ -170,7 +190,7 @@ public class File extends TableImpl<FileRecord> {
 
     @Override
     public List<Index> getIndexes() {
-        return Arrays.asList(Indexes.IDX_FILE_OWNER_CREATED);
+        return Arrays.asList(Indexes.IDX_FILE_OWNER_CREATED, Indexes.IDX_FILE_UPLOAD_EXPIRY);
     }
 
     @Override
@@ -194,9 +214,14 @@ public class File extends TableImpl<FileRecord> {
     @Override
     public List<Check<FileRecord>> getChecks() {
         return Arrays.asList(
+            Internal.createCheck(this, DSL.name("file_failure_reason_by_status"), "((((status)::text = 'UPLOAD_FAILED'::text) = (failure_reason IS NOT NULL)))", true),
+            Internal.createCheck(this, DSL.name("file_failure_reason_check"), "(((failure_reason)::text = ANY ((ARRAY['SIZE_MISMATCH'::character varying, 'TIMEOUT'::character varying, 'ABORTED'::character varying, 'STORAGE_ERROR'::character varying])::text[])))", true),
+            Internal.createCheck(this, DSL.name("file_infection_signature_by_status"), "((((status)::text = 'INFECTED'::text) = (infection_signature IS NOT NULL)))", true),
+            Internal.createCheck(this, DSL.name("file_sha256_by_status"), "(((((status)::text = ANY ((ARRAY['UPLOADING'::character varying, 'UPLOAD_FAILED'::character varying])::text[])) AND (sha256 IS NULL)) OR (((status)::text <> ALL ((ARRAY['UPLOADING'::character varying, 'UPLOAD_FAILED'::character varying])::text[])) AND (sha256 IS NOT NULL))))", true),
             Internal.createCheck(this, DSL.name("file_sha256_check"), "((sha256 ~ '^[0-9a-f]{64}$'::text))", true),
             Internal.createCheck(this, DSL.name("file_size_bytes_check"), "((size_bytes >= 0))", true),
-            Internal.createCheck(this, DSL.name("file_status_check"), "(((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SCANNING'::character varying, 'CLEAN'::character varying, 'INFECTED'::character varying, 'FAILED'::character varying])::text[])))", true)
+            Internal.createCheck(this, DSL.name("file_status_check"), "(((status)::text = ANY ((ARRAY['UPLOADING'::character varying, 'UPLOAD_FAILED'::character varying, 'PENDING'::character varying, 'SCANNING'::character varying, 'CLEAN'::character varying, 'INFECTED'::character varying, 'SCAN_FAILED'::character varying])::text[])))", true),
+            Internal.createCheck(this, DSL.name("file_version_check"), "((version >= 0))", true)
         );
     }
 

@@ -105,31 +105,87 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> {
     }
 
     /**
+     * Setter for <code>storage.file.upload_expires_at</code>.
+     */
+    public void setUploadExpiresAt(Instant value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>storage.file.upload_expires_at</code>.
+     */
+    public Instant getUploadExpiresAt() {
+        return (Instant) get(6);
+    }
+
+    /**
+     * Setter for <code>storage.file.failure_reason</code>.
+     */
+    public void setFailureReason(String value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>storage.file.failure_reason</code>.
+     */
+    public String getFailureReason() {
+        return (String) get(7);
+    }
+
+    /**
+     * Setter for <code>storage.file.infection_signature</code>.
+     */
+    public void setInfectionSignature(String value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>storage.file.infection_signature</code>.
+     */
+    public String getInfectionSignature() {
+        return (String) get(8);
+    }
+
+    /**
+     * Setter for <code>storage.file.version</code>.
+     */
+    public void setVersion(Long value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>storage.file.version</code>.
+     */
+    public Long getVersion() {
+        return (Long) get(9);
+    }
+
+    /**
      * Setter for <code>storage.file.created_at</code>.
      */
     public void setCreatedAt(Instant value) {
-        set(6, value);
+        set(10, value);
     }
 
     /**
      * Getter for <code>storage.file.created_at</code>.
      */
     public Instant getCreatedAt() {
-        return (Instant) get(6);
+        return (Instant) get(10);
     }
 
     /**
      * Setter for <code>storage.file.updated_at</code>.
      */
     public void setUpdatedAt(Instant value) {
-        set(7, value);
+        set(11, value);
     }
 
     /**
      * Getter for <code>storage.file.updated_at</code>.
      */
     public Instant getUpdatedAt() {
-        return (Instant) get(7);
+        return (Instant) get(11);
     }
 
     // -------------------------------------------------------------------------
@@ -155,7 +211,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> {
     /**
      * Create a detached, initialised FileRecord
      */
-    public FileRecord(Long id, Long ownerId, String originalName, Long sizeBytes, String sha256, String status, Instant createdAt, Instant updatedAt) {
+    public FileRecord(Long id, Long ownerId, String originalName, Long sizeBytes, String sha256, String status, Instant uploadExpiresAt, String failureReason, String infectionSignature, Long version, Instant createdAt, Instant updatedAt) {
         super(File.FILE);
 
         setId(id);
@@ -164,6 +220,10 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> {
         setSizeBytes(sizeBytes);
         setSha256(sha256);
         setStatus(status);
+        setUploadExpiresAt(uploadExpiresAt);
+        setFailureReason(failureReason);
+        setInfectionSignature(infectionSignature);
+        setVersion(version);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
         resetTouchedOnNotNull();

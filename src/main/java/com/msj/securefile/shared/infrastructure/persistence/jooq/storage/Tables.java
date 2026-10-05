@@ -5,6 +5,7 @@ package com.msj.securefile.shared.infrastructure.persistence.jooq.storage;
 
 
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.FileEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanJob;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanVerdict;
 
@@ -19,6 +20,11 @@ public class Tables {
      * The table <code>storage.file</code>.
      */
     public static final File FILE = File.FILE;
+
+    /**
+     * The table <code>storage.file_event</code>.
+     */
+    public static final FileEvent FILE_EVENT = FileEvent.FILE_EVENT;
 
     /**
      * The table <code>storage.scan_job</code>.
