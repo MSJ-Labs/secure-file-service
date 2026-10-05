@@ -45,8 +45,13 @@ com.msj.securefile
 │   └── infrastructure
 │       ├── adapters.persistence  jOOQ repositories
 │       └── security              JWT provider, cookies, filter, BCrypt hasher
-├── storage                       file upload, quarantine, scan: domain implemented (see "Storage domain" below);
-│                                 application, infrastructure and api are planned
+├── storage                       file upload, quarantine, scan: domain, application and infrastructure implemented
+│   │                             (see "Storage domain" below); the api and the worker runtime are planned
+│   ├── application               command/query handlers, result objects
+│   │   └── port.out              FileRepository, ScanJobRepository, FileStoragePort, VirusScanner, IdGenerator,
+│   │                             CurrentUserProvider, Actor
+│   └── infrastructure
+│       └── adapters              persistence (jOOQ, audit), storage (S3), scanner (ClamAV), id, security
 ├── shared
 │   ├── domain                    DDD building blocks: AggregateRoot, VersionedAggregateRoot, Entity, ValueObject, DomainEvent
 │   └── infrastructure.persistence.jooq   generated jOOQ code (committed), one package per schema
@@ -63,8 +68,10 @@ Rules (ArchUnit, `ArchitectureTest`, see `CLAUDE.md`):
 - A `valueobject` package holds only classes that implement `shared.domain.ValueObject`, and every such class lives in a `valueobject` package (storage today; `auth` still has to follow).
 
 Ports:
-- `FileStoragePort` (planned): two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based (write with a known digest computation, read as `InputStream`, move quarantine -> clean, delete). The domain has no notion of buckets: the adapter maps zones to buckets or prefixes.
-- `CurrentUserProvider` (planned, file context): returns the caller as an `OwnerId`. The adapter in `infrastructure` translates the authenticated principal, so the storage context does not depend on `auth`.
+- `FileStoragePort`: two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based: `store` (writes the body, reports the size and the SHA-256 it measured while reading, and never reads past a limit it is given), `open`, `promote` (copy quarantine -> clean, the quarantine is cleared only after the verdict is recorded so a crash can be retried) and `delete` (already gone is not an error). The domain has no notion of buckets: the S3 adapter maps zones to buckets and names objects by file id, never by user-supplied name. A body longer than the limit stops the write and keeps nothing (`UploadTooLargeException`), a failing read of the body is `UploadInterruptedException`, a failing write is `FileStorageException`.
+- `VirusScanner`: scans a stream and returns a verdict. A scanner that cannot be reached (`ScannerUnavailableException`) says nothing about the file and the job is released without consuming an attempt; a scan that does not complete (`ScanExecutionException`) counts as an attempt.
+- `CurrentUserProvider`: returns the caller as an `OwnerId`. Its adapter reads the security context through `shared.infrastructure.security.AuthenticatedPrincipal` (the access token carries the user id in a `uid` claim), so neither `auth` nor `storage` knows the other's types; ArchUnit enforces it. It fails closed for anything that cannot tell its id, the anonymous user included.
+- `FileRepository` and `ScanJobRepository`: `save` and `saveAll` take the `Actor` (user, worker or system) the change is made by and write the state and its audit events together. `findByIdAndOwner` is the only lookup by caller: there is no `findById` for a user request, so no handler can forget the ownership check.
 
 Authentication: JWT (HS512) in HttpOnly SameSite=Strict `access_token` and `refresh_token` cookies. Refresh tokens are stored as hashes and can be revoked. Five failed logins lock the account for 30 minutes. Unknown user, disabled account and wrong password return the same 401 (`Invalid credentials`); domain exceptions carry fixed messages and `AuthExceptionHandler` maps them to RFC 9457 problem details. The clock is injected (`Clock` bean, UTC) and handed to the domain as a parameter.
 
@@ -141,7 +148,8 @@ Cache table keyed by SHA-256, storing the verdict, the signature DB version and 
 ## 7. Scan job queue
 
 - A scan job row is created in PostgreSQL in the same transaction that marks the file `PENDING`. The job goes to the `SMALL` or `LARGE` queue (`ScanQueuePolicy`), each served by its own workers, so a large scan never delays the small ones.
-- Workers claim jobs with `SELECT ... FOR UPDATE SKIP LOCKED` (no contention, horizontally scalable, no broker needed) and commit immediately: the claim sets the lease owner and expiry, and the file moves to `SCANNING`. ClamAV then scans outside any transaction while a heartbeat extends the lease; no row lock is held during the scan. On completion the worker applies its verdict with a compare-and-set on the lease owner.
+- Workers claim jobs in batches, as many as they have free slots, with `SELECT ... LIMIT n FOR UPDATE SKIP LOCKED` (no contention, horizontally scalable, no broker needed) and commit immediately: the claim sets the lease owner and expiry, and the files move to `SCANNING`. A worker never claims more than it can start at once, because a lease runs from the claim and a job left waiting would see it expire and lose an attempt. ClamAV then scans outside any transaction while a heartbeat extends the lease; the only database lock is the one of the short claim transaction, during the scan a job is protected by its lease, not by a lock. On completion the worker applies its verdict with a compare-and-set on the lease owner.
+- A job whose file is not in the expected state (a `PENDING` job whose file is not `PENDING`, or an expired lease whose file is not `SCANNING`) is inconsistent data. It must not fail the rest of its batch nor stay at the head of the queue: its job counts a failed attempt and waits for its backoff, and its file is left alone.
 - Runtime (planned, not implemented): `web` and `worker` Spring profiles in the same jar, scheduling and profile wiring in `infrastructure`; a bounded executor per queue (a worker claims only when a slot is free); an exponential polling delay that falls back to zero as soon as a job is found; graceful shutdown that releases the leases.
 
 ## 8. Queue failure handling
@@ -187,9 +195,10 @@ Requirement: the history of every change to a file is kept; nothing is overwritt
 
 Domain (implemented): `SecureFile` records one `FileEvent` per transition and `ScanJob` one `ScanJobEvent` (both `sealed` hierarchies, so the code that writes them is checked by the compiler). Every event carries the `fileId`, so the whole history of a file, upload and scan attempts together, is one query. The heartbeat is not a transition and records nothing (it would write a row every few seconds for no audit value).
 
-Persistence (planned, not implemented yet):
-- One table `storage.file_event` for both aggregates: `id` (TSID, generated by the application), `aggregate_type`, `aggregate_id`, `sequence`, `file_id`, `event_type`, `occurred_at`, `actor_type`, `actor_id`, `payload` (JSONB with only the fields specific to the event type; never file content or secrets). Index on `(file_id, sequence)`; unique `(aggregate_type, aggregate_id, sequence)`.
-- No auto-increment or sequence query. Each aggregate carries a `version` (number of events so far, 0 at creation). At save time the adapter computes in memory `new version = loaded version + number of events`, updates the state with `UPDATE ... SET version = new WHERE id = ? AND version = loaded` (optimistic lock, 0 rows means a concurrent change), and inserts the events with sequences `loaded + 1 .. new` in one batch. No extra read, batch friendly. A claim done in SQL (`UPDATE ... RETURNING`) increments `version` in the same statement.
-- Events are written in the same transaction as the state change, so history and state cannot diverge. The actor (owner, worker, reaper) is added by the handler when it stores the event: the aggregate does not know who calls it.
+Persistence (implemented):
+- One table `storage.file_event` for both aggregates: `id` (TSID, generated by the application), `file_id`, `aggregate_type`, `aggregate_id`, `version`, `event_type`, `payload` (JSONB with only the fields specific to the event type; never file content or secrets), `actor_type` (`USER`, `WORKER`, `SYSTEM`), `actor_id` (empty for the system), `occurred_at`. Index on `(file_id, occurred_at)`; unique `(aggregate_type, aggregate_id, version)`; no foreign key to `file`, so deleting a file never deletes its history. `AuditEventMapper` turns each event into a row with an exhaustive `switch` over the two sealed families, with event type names spelled out (never derived from a class name, they are stored forever).
+- No auto-increment or sequence query. The version belongs to `VersionedAggregateRoot` (the storage aggregates; `User` does not carry one) and is the version the aggregate was loaded with, 0 when new. At save time the adapter computes in memory `new version = loaded version + number of events`, inserts the new aggregates in one multi-row `INSERT`, updates the others in one JDBC batch whose every row is `UPDATE ... WHERE id = ? AND version = loaded` (optimistic lock, a row that matches nothing means a concurrent change and raises `ConcurrentUpdateException`), and inserts the events of all the aggregates in one statement, numbered after the loaded version. No extra read.
+- The exception is the heartbeat: it is not a transition, it records no event and must not touch the version (which counts events), so it has its own operation, `renewLease`, guarded on the lease owner and the `LEASED` state, and raises `LeaseLostException` when the job is no longer held, which tells the worker to stop.
+- Events are written in the same transaction as the state change, so history and state cannot diverge. The actor is passed by the handler that makes the change (the caller, the worker, or the system for the reapers) as a second argument of `save`: the infrastructure does not guess who acts, and the repository cannot write a state without its audit. It is metadata of the event envelope, not part of the domain event.
 - The table is immutable by design; enforcing it in the database (no `UPDATE`/`DELETE` privilege, or a trigger) and a retention policy (archiving or partitioning by date) are to be decided.
 - File content is immutable: a new upload is a new file, never an overwrite of the stored object. Deletion will be logical. S3 versioning is not used: the audit concerns state changes, not copies of the bytes.
