@@ -13,8 +13,10 @@ public interface FileStoragePort {
     // The caller closes the stream.
     InputStream open(StorageZone zone, FileId id);
 
-    // Streams the body into the zone and reports what was actually written.
-    StoredContent store(StorageZone zone, FileId id, InputStream content);
+    // Streams the body into the zone and reports what was actually written. It never reads more than maxBytes: a longer
+    // body stops the write, nothing is kept, and UploadTooLargeException is thrown. Reading the body failing throws
+    // UploadInterruptedException, writing it failing throws FileStorageException.
+    StoredContent store(StorageZone zone, FileId id, InputStream content, long maxBytes);
 
     // Copies the content from QUARANTINE to CLEAN, leaving the quarantine untouched. Same key, same bytes: redoing it
     // after a crash is harmless, which is what lets a scan be retried.

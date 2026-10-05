@@ -11,6 +11,7 @@ import com.msj.securefile.storage.application.port.out.FileStoragePort;
 import com.msj.securefile.storage.application.port.out.StorageZone;
 import com.msj.securefile.storage.application.port.out.StoredContent;
 import com.msj.securefile.storage.application.port.out.UploadInterruptedException;
+import com.msj.securefile.storage.application.port.out.UploadTooLargeException;
 import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.UploadFailureReason;
 import com.msj.securefile.storage.domain.file.exception.FileNotUploadableException;
@@ -33,6 +34,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -46,7 +48,8 @@ class UploadFileCommandHandlerTest {
     private static final OwnerId OWNER = OwnerId.of(7L);
     private static final FileId FILE_ID = FileId.of(42L);
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
-    private static final StoredContent STORED = new StoredContent(1_000, DIGEST);
+    private static final long DECLARED_SIZE = 1_000;
+    private static final StoredContent STORED = new StoredContent(DECLARED_SIZE, DIGEST);
     private static final InputStream BODY = new ByteArrayInputStream(new byte[]{1, 2, 3});
 
     @Mock FileRepository fileRepository;
@@ -75,12 +78,12 @@ class UploadFileCommandHandlerTest {
     @Test
     void handle_storesTheBodyInQuarantineThenCompletesTheUploadWithTheMeasuredValues() {
         givenTheCallersFile(uploading());
-        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY)).thenReturn(STORED);
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenReturn(STORED);
 
         handler.handle(new UploadFileCommand(FILE_ID, BODY));
 
         InOrder order = inOrder(fileStoragePort, completeUpload);
-        order.verify(fileStoragePort).store(StorageZone.QUARANTINE, FILE_ID, BODY);
+        order.verify(fileStoragePort).store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE);
         order.verify(completeUpload).handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000));
         verify(failUpload, never()).handle(any());
     }
@@ -93,7 +96,7 @@ class UploadFileCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
-        verify(fileStoragePort, never()).store(any(), any(), any());
+        verify(fileStoragePort, never()).store(any(), any(), any(), anyLong());
     }
 
     @Test
@@ -105,7 +108,7 @@ class UploadFileCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
                 .isInstanceOf(FileNotUploadableException.class);
 
-        verify(fileStoragePort, never()).store(any(), any(), any());
+        verify(fileStoragePort, never()).store(any(), any(), any(), anyLong());
         verify(failUpload, never()).handle(any());
     }
 
@@ -113,7 +116,7 @@ class UploadFileCommandHandlerTest {
     void handle_failsTheUploadAndCleansTheQuarantineWhenTheStorageFails() {
         FileStorageException failure = new FileStorageException(new RuntimeException("disk full"));
         givenTheCallersFile(uploading());
-        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY)).thenThrow(failure);
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(failure);
 
         assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(failure);
 
@@ -125,7 +128,7 @@ class UploadFileCommandHandlerTest {
     @Test
     void handle_failsTheUploadAndCleansTheQuarantineWhenTheSizeDoesNotMatch() {
         givenTheCallersFile(uploading());
-        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY)).thenReturn(STORED);
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenReturn(STORED);
         doThrow(new UploadSizeMismatchException()).when(completeUpload).handle(any());
 
         assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
@@ -136,10 +139,24 @@ class UploadFileCommandHandlerTest {
     }
 
     @Test
+    void handle_failsTheUploadAsASizeMismatchWhenTheBodyIsLargerThanDeclared() {
+        UploadTooLargeException tooLarge = new UploadTooLargeException();
+        givenTheCallersFile(uploading());
+        // The storage is told never to read more than the declared size: the limit is the caller's own declaration.
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(tooLarge);
+
+        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(tooLarge);
+
+        verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.SIZE_MISMATCH));
+        verify(fileStoragePort).delete(StorageZone.QUARANTINE, FILE_ID);
+        verify(completeUpload, never()).handle(any());
+    }
+
+    @Test
     void handle_failsTheUploadAsAbortedAndCleansTheQuarantineWhenTheClientStopsSending() {
         UploadInterruptedException interruption = new UploadInterruptedException(new RuntimeException("reset"));
         givenTheCallersFile(uploading());
-        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY)).thenThrow(interruption);
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(interruption);
 
         assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(interruption);
 
@@ -153,7 +170,7 @@ class UploadFileCommandHandlerTest {
     void handle_reportsTheOriginalErrorEvenWhenTheCleanupFails() {
         FileStorageException failure = new FileStorageException(new RuntimeException("disk full"));
         givenTheCallersFile(uploading());
-        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY)).thenThrow(failure);
+        when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(failure);
         doThrow(new FileStorageException(new RuntimeException("delete failed")))
                 .when(fileStoragePort).delete(StorageZone.QUARANTINE, FILE_ID);
 
