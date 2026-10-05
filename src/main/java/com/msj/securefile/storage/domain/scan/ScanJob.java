@@ -1,6 +1,6 @@
 package com.msj.securefile.storage.domain.scan;
 
-import com.msj.securefile.shared.domain.AggregateRoot;
+import com.msj.securefile.shared.domain.VersionedAggregateRoot;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
 import com.msj.securefile.storage.domain.scan.event.*;
 import com.msj.securefile.storage.domain.scan.exception.InvalidScanJobTransitionException;
@@ -20,7 +20,7 @@ import java.util.Optional;
  * heartbeat keeps extending, so a dead worker is detected within the lease duration whatever the file size.
  */
 @Getter
-public class ScanJob extends AggregateRoot<ScanJobId> {
+public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
 
     private static final String LEASE_EXPIRED_ERROR = "The lease expired before the worker finished.";
 
@@ -37,8 +37,8 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
     private Instant updatedAt;
 
     private ScanJob(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
-                    Instant nextAttemptAt, Instant createdAt, Instant updatedAt) {
-        super(id);
+                    Instant nextAttemptAt, Instant createdAt, Instant updatedAt, long version) {
+        super(id, version);
         this.fileId = fileId;
         this.queue = queue;
         this.state = state;
@@ -52,8 +52,21 @@ public class ScanJob extends AggregateRoot<ScanJobId> {
         if (fileId == null) throw new IllegalArgumentException("File is required");
         if (queue == null) throw new IllegalArgumentException("Queue is required");
 
-        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, now, now);
+        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, now, now, 0L);
         job.registerEvent(new ScanJobCreated(id, fileId, queue, now));
+        return job;
+    }
+
+    /**
+     * Rebuilds a stored job: no rule is applied and no event is recorded, the persisted state is trusted as is.
+     */
+    public static ScanJob reconstitute(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
+                                       Instant nextAttemptAt, WorkerId leaseOwner, Instant leaseExpiresAt,
+                                       String lastError, Instant createdAt, Instant updatedAt, long version) {
+        ScanJob job = new ScanJob(id, fileId, queue, state, attempts, nextAttemptAt, createdAt, updatedAt, version);
+        job.leaseOwner = leaseOwner;
+        job.leaseExpiresAt = leaseExpiresAt;
+        job.lastError = lastError;
         return job;
     }
 
