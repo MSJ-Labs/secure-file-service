@@ -11,6 +11,7 @@ import com.msj.securefile.storage.application.port.out.FileStoragePort;
 import com.msj.securefile.storage.application.port.out.StorageZone;
 import com.msj.securefile.storage.application.port.out.StoredContent;
 import com.msj.securefile.storage.application.port.out.UploadInterruptedException;
+import com.msj.securefile.storage.application.port.out.UploadTooLargeException;
 import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.UploadFailureReason;
 import com.msj.securefile.storage.domain.file.exception.SecureFileNotFoundException;
@@ -42,13 +43,17 @@ public class UploadFileCommandHandler {
                 .orElseThrow(SecureFileNotFoundException::new);
         file.ensureUploadable();
 
-        StoredContent stored = store(command);
+        StoredContent stored = store(command, file.getDeclaredSize());
         complete(fileId, stored);
     }
 
-    private StoredContent store(UploadFileCommand command) {
+    // The limit is what the caller declared: the storage never reads more, so the quarantine cannot be filled.
+    private StoredContent store(UploadFileCommand command, long declaredSize) {
         try {
-            return fileStoragePort.store(StorageZone.QUARANTINE, command.fileId(), command.content());
+            return fileStoragePort.store(StorageZone.QUARANTINE, command.fileId(), command.content(), declaredSize);
+        } catch (UploadTooLargeException e) {
+            abandon(command.fileId(), UploadFailureReason.SIZE_MISMATCH);
+            throw e;
         } catch (UploadInterruptedException e) {
             abandon(command.fileId(), UploadFailureReason.ABORTED);
             throw e;

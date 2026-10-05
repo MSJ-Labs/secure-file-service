@@ -68,8 +68,10 @@ class JooqScanJobRepositoryAdapterIT {
     }
 
     private List<FileEventRecord> eventsOf(long jobId) {
+        // The tests give the job and its file the same id, so the type of the aggregate has to be part of the filter.
         return dsl.selectFrom(FILE_EVENT)
-                .where(FILE_EVENT.AGGREGATE_ID.eq(jobId))
+                .where(FILE_EVENT.AGGREGATE_TYPE.eq("SCAN_JOB"))
+                .and(FILE_EVENT.AGGREGATE_ID.eq(jobId))
                 .orderBy(FILE_EVENT.VERSION)
                 .fetch();
     }
