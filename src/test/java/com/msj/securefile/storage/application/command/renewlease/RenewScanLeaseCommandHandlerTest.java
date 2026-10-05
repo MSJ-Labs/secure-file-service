@@ -1,6 +1,5 @@
 package com.msj.securefile.storage.application.command.renewlease;
 
-import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
 import com.msj.securefile.storage.domain.scan.ScanJob;
@@ -24,7 +23,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,7 +36,6 @@ class RenewScanLeaseCommandHandlerTest {
     private static final Duration LEASE = Duration.ofSeconds(30);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final WorkerId WORKER = WorkerId.of("worker-1");
-    private static final Actor ACTOR = new Actor.Worker(WORKER);
 
     @Mock ScanJobRepository scanJobRepository;
 
@@ -56,15 +53,16 @@ class RenewScanLeaseCommandHandlerTest {
     }
 
     @Test
-    void handle_pushesTheExpiryForwardFromNowAndSavesTheJob() {
+    void handle_pushesTheExpiryForwardFromNowAndWritesTheRenewal() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.of(leasedTo(WORKER)));
 
         handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE));
 
-        ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
-        assertThat(saved.getValue().getLeaseExpiresAt()).contains(NOW.plus(LEASE));
-        assertThat(saved.getValue().getLeaseOwner()).contains(WORKER);
+        // Not save(): a heartbeat is no transition and records no event, so a save would find nothing to write.
+        ArgumentCaptor<ScanJob> renewed = ArgumentCaptor.forClass(ScanJob.class);
+        verify(scanJobRepository).renewLease(renewed.capture());
+        assertThat(renewed.getValue().getLeaseExpiresAt()).contains(NOW.plus(LEASE));
+        assertThat(renewed.getValue().getLeaseOwner()).contains(WORKER);
     }
 
     @Test
@@ -74,7 +72,7 @@ class RenewScanLeaseCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any(), any());
+        verify(scanJobRepository, never()).renewLease(any());
     }
 
     @Test
@@ -85,6 +83,6 @@ class RenewScanLeaseCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any(), any());
+        verify(scanJobRepository, never()).renewLease(any());
     }
 }

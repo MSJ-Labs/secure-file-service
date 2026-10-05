@@ -33,7 +33,9 @@ public class ReapExpiredUploadsCommandHandler {
         List<SecureFile> expired = fileRepository.findExpiredUploads(now, command.batchSize());
         for (SecureFile file : expired) {
             file.failUpload(UploadFailureReason.TIMEOUT, now);
-            fileRepository.save(file, actor);
+        }
+        if (!expired.isEmpty()) {
+            fileRepository.saveAll(expired, actor);
         }
         return expired.size();
     }

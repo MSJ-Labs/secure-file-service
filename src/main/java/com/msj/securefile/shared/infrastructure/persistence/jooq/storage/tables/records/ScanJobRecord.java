@@ -49,115 +49,143 @@ public class ScanJobRecord extends UpdatableRecordImpl<ScanJobRecord> {
     }
 
     /**
+     * Setter for <code>storage.scan_job.queue</code>.
+     */
+    public void setQueue(String value) {
+        set(2, value);
+    }
+
+    /**
+     * Getter for <code>storage.scan_job.queue</code>.
+     */
+    public String getQueue() {
+        return (String) get(2);
+    }
+
+    /**
      * Setter for <code>storage.scan_job.state</code>.
      */
     public void setState(String value) {
-        set(2, value);
+        set(3, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.state</code>.
      */
     public String getState() {
-        return (String) get(2);
+        return (String) get(3);
     }
 
     /**
      * Setter for <code>storage.scan_job.attempts</code>.
      */
     public void setAttempts(Integer value) {
-        set(3, value);
+        set(4, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.attempts</code>.
      */
     public Integer getAttempts() {
-        return (Integer) get(3);
+        return (Integer) get(4);
     }
 
     /**
      * Setter for <code>storage.scan_job.next_attempt_at</code>.
      */
     public void setNextAttemptAt(Instant value) {
-        set(4, value);
+        set(5, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.next_attempt_at</code>.
      */
     public Instant getNextAttemptAt() {
-        return (Instant) get(4);
+        return (Instant) get(5);
     }
 
     /**
      * Setter for <code>storage.scan_job.lease_owner</code>.
      */
     public void setLeaseOwner(String value) {
-        set(5, value);
+        set(6, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.lease_owner</code>.
      */
     public String getLeaseOwner() {
-        return (String) get(5);
+        return (String) get(6);
     }
 
     /**
      * Setter for <code>storage.scan_job.lease_expires_at</code>.
      */
     public void setLeaseExpiresAt(Instant value) {
-        set(6, value);
+        set(7, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.lease_expires_at</code>.
      */
     public Instant getLeaseExpiresAt() {
-        return (Instant) get(6);
+        return (Instant) get(7);
     }
 
     /**
      * Setter for <code>storage.scan_job.last_error</code>.
      */
     public void setLastError(String value) {
-        set(7, value);
+        set(8, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.last_error</code>.
      */
     public String getLastError() {
-        return (String) get(7);
+        return (String) get(8);
+    }
+
+    /**
+     * Setter for <code>storage.scan_job.version</code>.
+     */
+    public void setVersion(Long value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>storage.scan_job.version</code>.
+     */
+    public Long getVersion() {
+        return (Long) get(9);
     }
 
     /**
      * Setter for <code>storage.scan_job.created_at</code>.
      */
     public void setCreatedAt(Instant value) {
-        set(8, value);
+        set(10, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.created_at</code>.
      */
     public Instant getCreatedAt() {
-        return (Instant) get(8);
+        return (Instant) get(10);
     }
 
     /**
      * Setter for <code>storage.scan_job.updated_at</code>.
      */
     public void setUpdatedAt(Instant value) {
-        set(9, value);
+        set(11, value);
     }
 
     /**
      * Getter for <code>storage.scan_job.updated_at</code>.
      */
     public Instant getUpdatedAt() {
-        return (Instant) get(9);
+        return (Instant) get(11);
     }
 
     // -------------------------------------------------------------------------
@@ -183,17 +211,19 @@ public class ScanJobRecord extends UpdatableRecordImpl<ScanJobRecord> {
     /**
      * Create a detached, initialised ScanJobRecord
      */
-    public ScanJobRecord(Long id, Long fileId, String state, Integer attempts, Instant nextAttemptAt, String leaseOwner, Instant leaseExpiresAt, String lastError, Instant createdAt, Instant updatedAt) {
+    public ScanJobRecord(Long id, Long fileId, String queue, String state, Integer attempts, Instant nextAttemptAt, String leaseOwner, Instant leaseExpiresAt, String lastError, Long version, Instant createdAt, Instant updatedAt) {
         super(ScanJob.SCAN_JOB);
 
         setId(id);
         setFileId(fileId);
+        setQueue(queue);
         setState(state);
         setAttempts(attempts);
         setNextAttemptAt(nextAttemptAt);
         setLeaseOwner(leaseOwner);
         setLeaseExpiresAt(leaseExpiresAt);
         setLastError(lastError);
+        setVersion(version);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
         resetTouchedOnNotNull();

@@ -17,6 +17,7 @@ import com.msj.securefile.storage.domain.scan.valueobject.WorkerId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -24,14 +25,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +50,8 @@ class ReclaimExpiredLeasesCommandHandlerTest {
 
     @Mock ScanJobRepository scanJobRepository;
     @Mock FileRepository fileRepository;
+    @Captor ArgumentCaptor<Collection<ScanJob>> savedJobs;
+    @Captor ArgumentCaptor<Collection<SecureFile>> savedFiles;
 
     private ReclaimExpiredLeasesCommandHandler handlerWith(ScanRetryPolicy policy) {
         return new ReclaimExpiredLeasesCommandHandler(scanJobRepository, fileRepository, policy, CLOCK);
@@ -71,7 +73,7 @@ class ReclaimExpiredLeasesCommandHandlerTest {
 
     private void givenExpiredLeaseOn(long jobId, long fileId) {
         when(scanJobRepository.findExpiredLeases(NOW, BATCH_SIZE)).thenReturn(List.of(expiredJob(jobId, fileId)));
-        when(fileRepository.findByIdForScan(FileId.of(fileId))).thenReturn(Optional.of(scanningFile(fileId)));
+        when(fileRepository.findAllByIdForScan(List.of(FileId.of(fileId)))).thenReturn(List.of(scanningFile(fileId)));
     }
 
     @Test
@@ -80,16 +82,16 @@ class ReclaimExpiredLeasesCommandHandlerTest {
 
         handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
-        ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
-        assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.PENDING);
-        // A worker that dies on a file consumes an attempt, so such a file is not retried forever.
-        assertThat(savedJob.getValue().getAttempts()).isEqualTo(1);
-        assertThat(savedJob.getValue().getLeaseOwner()).isEmpty();
-
-        ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
-        assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.PENDING);
+        verify(scanJobRepository).saveAll(savedJobs.capture(), eq(ACTOR));
+        assertThat(savedJobs.getValue()).singleElement().satisfies(job -> {
+            assertThat(job.getState()).isEqualTo(ScanJobState.PENDING);
+            // A worker that dies on a file consumes an attempt, so such a file is not retried forever.
+            assertThat(job.getAttempts()).isEqualTo(1);
+            assertThat(job.getLeaseOwner()).isEmpty();
+        });
+        verify(fileRepository).saveAll(savedFiles.capture(), eq(ACTOR));
+        assertThat(savedFiles.getValue()).singleElement()
+                .satisfies(file -> assertThat(file.getStatus()).isEqualTo(FileStatus.PENDING));
     }
 
     @Test
@@ -98,27 +100,90 @@ class ReclaimExpiredLeasesCommandHandlerTest {
 
         handlerWith(ONE_SHOT).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
-        ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
-        assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.DONE);
-
-        ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
-        assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.SCAN_FAILED);
+        verify(scanJobRepository).saveAll(savedJobs.capture(), eq(ACTOR));
+        assertThat(savedJobs.getValue()).singleElement()
+                .satisfies(job -> assertThat(job.getState()).isEqualTo(ScanJobState.DONE));
+        verify(fileRepository).saveAll(savedFiles.capture(), eq(ACTOR));
+        assertThat(savedFiles.getValue()).singleElement()
+                .satisfies(file -> assertThat(file.getStatus()).isEqualTo(FileStatus.SCAN_FAILED));
     }
 
     @Test
-    void handle_returnsTheNumberOfReclaimedJobs() {
+    void handle_reclaimsTheWholeBatchWithOneFileQueryAndOneSaveEach() {
         when(scanJobRepository.findExpiredLeases(NOW, BATCH_SIZE))
                 .thenReturn(List.of(expiredJob(1L, 11L), expiredJob(2L, 12L)));
-        when(fileRepository.findByIdForScan(FileId.of(11L))).thenReturn(Optional.of(scanningFile(11L)));
-        when(fileRepository.findByIdForScan(FileId.of(12L))).thenReturn(Optional.of(scanningFile(12L)));
+        when(fileRepository.findAllByIdForScan(List.of(FileId.of(11L), FileId.of(12L))))
+                .thenReturn(List.of(scanningFile(11L), scanningFile(12L)));
 
         int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         assertThat(reclaimed).isEqualTo(2);
-        verify(scanJobRepository, times(2)).save(any(), any());
-        verify(fileRepository, times(2)).save(any(), any());
+        verify(scanJobRepository).saveAll(savedJobs.capture(), eq(ACTOR));
+        assertThat(savedJobs.getValue()).hasSize(2);
+        verify(fileRepository).saveAll(savedFiles.capture(), eq(ACTOR));
+        assertThat(savedFiles.getValue()).hasSize(2);
+    }
+
+    private static SecureFile waitingFile(long fileId) {
+        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(7L), "report.pdf", 1_000,
+                CLAIMED_AT, CLAIMED_AT.plusSeconds(3_600));
+        file.completeUpload(Sha256.of("a".repeat(64)), 1_000, CLAIMED_AT);
+        return file;
+    }
+
+    private ScanJob savedJob(long jobId) {
+        return savedJobs.getValue().stream()
+                .filter(job -> job.id().equals(ScanJobId.of(jobId)))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    @Test
+    void handle_reclaimsTheJobButLeavesAloneAFileThatIsNotBeingScanned() {
+        when(scanJobRepository.findExpiredLeases(NOW, BATCH_SIZE))
+                .thenReturn(List.of(expiredJob(1L, 11L), expiredJob(2L, 12L)));
+        // The second file is not SCANNING although its job holds a lease: inconsistent data.
+        when(fileRepository.findAllByIdForScan(List.of(FileId.of(11L), FileId.of(12L))))
+                .thenReturn(List.of(scanningFile(11L), waitingFile(12L)));
+
+        int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
+
+        // Both jobs are taken back, so the sick one no longer sits on its dead lease, and the batch goes through.
+        assertThat(reclaimed).isEqualTo(2);
+        verify(scanJobRepository).saveAll(savedJobs.capture(), eq(ACTOR));
+        assertThat(savedJob(1L).getState()).isEqualTo(ScanJobState.PENDING);
+        assertThat(savedJob(2L).getState()).isEqualTo(ScanJobState.PENDING);
+        assertThat(savedJob(2L).getAttempts()).isEqualTo(1);
+        // Only the healthy file is written: nobody knows what state the other one should be in.
+        verify(fileRepository).saveAll(savedFiles.capture(), eq(ACTOR));
+        assertThat(savedFiles.getValue()).extracting(SecureFile::id).containsExactly(FileId.of(11L));
+    }
+
+    @Test
+    void handle_treatsAJobWithoutFileTheSameWay() {
+        when(scanJobRepository.findExpiredLeases(NOW, BATCH_SIZE))
+                .thenReturn(List.of(expiredJob(1L, 11L), expiredJob(2L, 12L)));
+        when(fileRepository.findAllByIdForScan(List.of(FileId.of(11L), FileId.of(12L))))
+                .thenReturn(List.of(scanningFile(11L)));
+
+        int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
+
+        assertThat(reclaimed).isEqualTo(2);
+        verify(scanJobRepository).saveAll(savedJobs.capture(), eq(ACTOR));
+        assertThat(savedJob(2L).getState()).isEqualTo(ScanJobState.PENDING);
+        verify(fileRepository).saveAll(savedFiles.capture(), eq(ACTOR));
+        assertThat(savedFiles.getValue()).extracting(SecureFile::id).containsExactly(FileId.of(11L));
+    }
+
+    @Test
+    void handle_writesNoFileWhenNoneOfTheBatchIsBeingScanned() {
+        when(scanJobRepository.findExpiredLeases(NOW, BATCH_SIZE)).thenReturn(List.of(expiredJob(2L, 12L)));
+        when(fileRepository.findAllByIdForScan(List.of(FileId.of(12L)))).thenReturn(List.of(waitingFile(12L)));
+
+        handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
+
+        verify(scanJobRepository).saveAll(any(), eq(ACTOR));
+        verify(fileRepository, never()).saveAll(any(), any());
     }
 
     @Test
@@ -128,7 +193,8 @@ class ReclaimExpiredLeasesCommandHandlerTest {
         int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         assertThat(reclaimed).isZero();
-        verify(scanJobRepository, never()).save(any(), any());
-        verify(fileRepository, never()).save(any(), any());
+        verify(fileRepository, never()).findAllByIdForScan(any());
+        verify(scanJobRepository, never()).saveAll(any(), any());
+        verify(fileRepository, never()).saveAll(any(), any());
     }
 }

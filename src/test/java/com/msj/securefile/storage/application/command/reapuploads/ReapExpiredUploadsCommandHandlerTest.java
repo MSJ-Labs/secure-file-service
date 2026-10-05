@@ -11,19 +11,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ class ReapExpiredUploadsCommandHandlerTest {
     private static final int BATCH_SIZE = 50;
 
     @Mock FileRepository fileRepository;
+    @Captor ArgumentCaptor<Collection<SecureFile>> saved;
 
     private ReapExpiredUploadsCommandHandler handler;
 
@@ -52,15 +54,15 @@ class ReapExpiredUploadsCommandHandlerTest {
     }
 
     @Test
-    void handle_failsEachExpiredUploadWithATimeoutAndSavesIt() {
+    void handle_failsEachExpiredUploadWithATimeoutAndSavesThemTogether() {
         when(fileRepository.findExpiredUploads(NOW, BATCH_SIZE))
                 .thenReturn(List.of(expiredUpload(1L), expiredUpload(2L)));
 
         handler.handle(new ReapExpiredUploadsCommand(BATCH_SIZE));
 
-        ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository, times(2)).save(saved.capture(), eq(ACTOR));
-        assertThat(saved.getAllValues()).allSatisfy(file -> {
+        // One batch write for the whole batch, not one write per file.
+        verify(fileRepository).saveAll(saved.capture(), eq(ACTOR));
+        assertThat(saved.getValue()).hasSize(2).allSatisfy(file -> {
             assertThat(file.getStatus()).isEqualTo(FileStatus.UPLOAD_FAILED);
             assertThat(file.getFailureReason()).contains(UploadFailureReason.TIMEOUT);
             assertThat(file.getUpdatedAt()).isEqualTo(NOW);
@@ -84,6 +86,6 @@ class ReapExpiredUploadsCommandHandlerTest {
         int reaped = handler.handle(new ReapExpiredUploadsCommand(BATCH_SIZE));
 
         assertThat(reaped).isZero();
-        verify(fileRepository, never()).save(any(), any());
+        verify(fileRepository, never()).saveAll(any(), any());
     }
 }

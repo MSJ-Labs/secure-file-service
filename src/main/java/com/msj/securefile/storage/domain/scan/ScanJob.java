@@ -36,14 +36,19 @@ public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
     private final Instant createdAt;
     private Instant updatedAt;
 
+    // The one constructor: every field is set here, so no instance exists half built. Both factories go through it.
     private ScanJob(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
-                    Instant nextAttemptAt, Instant createdAt, Instant updatedAt, long version) {
+                    Instant nextAttemptAt, WorkerId leaseOwner, Instant leaseExpiresAt, String lastError,
+                    Instant createdAt, Instant updatedAt, long version) {
         super(id, version);
         this.fileId = fileId;
         this.queue = queue;
         this.state = state;
         this.attempts = attempts;
         this.nextAttemptAt = nextAttemptAt;
+        this.leaseOwner = leaseOwner;
+        this.leaseExpiresAt = leaseExpiresAt;
+        this.lastError = lastError;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -52,7 +57,7 @@ public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
         if (fileId == null) throw new IllegalArgumentException("File is required");
         if (queue == null) throw new IllegalArgumentException("Queue is required");
 
-        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, now, now, 0L);
+        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, null, null, null, now, now, 0L);
         job.registerEvent(new ScanJobCreated(id, fileId, queue, now));
         return job;
     }
@@ -63,11 +68,8 @@ public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
     public static ScanJob reconstitute(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
                                        Instant nextAttemptAt, WorkerId leaseOwner, Instant leaseExpiresAt,
                                        String lastError, Instant createdAt, Instant updatedAt, long version) {
-        ScanJob job = new ScanJob(id, fileId, queue, state, attempts, nextAttemptAt, createdAt, updatedAt, version);
-        job.leaseOwner = leaseOwner;
-        job.leaseExpiresAt = leaseExpiresAt;
-        job.lastError = lastError;
-        return job;
+        return new ScanJob(id, fileId, queue, state, attempts, nextAttemptAt, leaseOwner, leaseExpiresAt, lastError,
+                createdAt, updatedAt, version);
     }
 
     /**

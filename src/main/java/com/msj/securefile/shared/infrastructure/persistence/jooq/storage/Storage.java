@@ -6,6 +6,7 @@ package com.msj.securefile.shared.infrastructure.persistence.jooq.storage;
 
 import com.msj.securefile.shared.infrastructure.persistence.jooq.DefaultCatalog;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.FileEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanJob;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanVerdict;
 
@@ -37,6 +38,11 @@ public class Storage extends SchemaImpl {
     public final File FILE = File.FILE;
 
     /**
+     * The table <code>storage.file_event</code>.
+     */
+    public final FileEvent FILE_EVENT = FileEvent.FILE_EVENT;
+
+    /**
      * The table <code>storage.scan_job</code>.
      */
     public final ScanJob SCAN_JOB = ScanJob.SCAN_JOB;
@@ -63,6 +69,7 @@ public class Storage extends SchemaImpl {
     public final List<Table<?>> getTables() {
         return Arrays.asList(
             File.FILE,
+            FileEvent.FILE_EVENT,
             ScanJob.SCAN_JOB,
             ScanVerdict.SCAN_VERDICT
         );

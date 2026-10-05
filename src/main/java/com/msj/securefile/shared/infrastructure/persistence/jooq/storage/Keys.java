@@ -5,8 +5,10 @@ package com.msj.securefile.shared.infrastructure.persistence.jooq.storage;
 
 
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.FileEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanJob;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanVerdict;
+import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.records.FileEventRecord;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.records.FileRecord;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.records.ScanJobRecord;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.records.ScanVerdictRecord;
@@ -31,6 +33,8 @@ public class Keys {
     // -------------------------------------------------------------------------
 
     public static final UniqueKey<FileRecord> FILE_PKEY = Internal.createUniqueKey(File.FILE, DSL.name("file_pkey"), new TableField[] { File.FILE.ID }, true);
+    public static final UniqueKey<FileEventRecord> FILE_EVENT_AGGREGATE_VERSION_UNIQUE = Internal.createUniqueKey(FileEvent.FILE_EVENT, DSL.name("file_event_aggregate_version_unique"), new TableField[] { FileEvent.FILE_EVENT.AGGREGATE_TYPE, FileEvent.FILE_EVENT.AGGREGATE_ID, FileEvent.FILE_EVENT.VERSION }, true);
+    public static final UniqueKey<FileEventRecord> FILE_EVENT_PKEY = Internal.createUniqueKey(FileEvent.FILE_EVENT, DSL.name("file_event_pkey"), new TableField[] { FileEvent.FILE_EVENT.ID }, true);
     public static final UniqueKey<ScanJobRecord> SCAN_JOB_FILE_ID_KEY = Internal.createUniqueKey(ScanJob.SCAN_JOB, DSL.name("scan_job_file_id_key"), new TableField[] { ScanJob.SCAN_JOB.FILE_ID }, true);
     public static final UniqueKey<ScanJobRecord> SCAN_JOB_PKEY = Internal.createUniqueKey(ScanJob.SCAN_JOB, DSL.name("scan_job_pkey"), new TableField[] { ScanJob.SCAN_JOB.ID }, true);
     public static final UniqueKey<ScanVerdictRecord> SCAN_VERDICT_PKEY = Internal.createUniqueKey(ScanVerdict.SCAN_VERDICT, DSL.name("scan_verdict_pkey"), new TableField[] { ScanVerdict.SCAN_VERDICT.SHA256 }, true);

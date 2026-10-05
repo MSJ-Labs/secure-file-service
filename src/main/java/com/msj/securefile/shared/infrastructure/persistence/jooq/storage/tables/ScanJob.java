@@ -72,6 +72,11 @@ public class ScanJob extends TableImpl<ScanJobRecord> {
     public final TableField<ScanJobRecord, Long> FILE_ID = createField(DSL.name("file_id"), SQLDataType.BIGINT.nullable(false), this, "");
 
     /**
+     * The column <code>storage.scan_job.queue</code>.
+     */
+    public final TableField<ScanJobRecord, String> QUEUE = createField(DSL.name("queue"), SQLDataType.VARCHAR(8).nullable(false), this, "");
+
+    /**
      * The column <code>storage.scan_job.state</code>.
      */
     public final TableField<ScanJobRecord, String> STATE = createField(DSL.name("state"), SQLDataType.VARCHAR(16).nullable(false), this, "");
@@ -100,6 +105,11 @@ public class ScanJob extends TableImpl<ScanJobRecord> {
      * The column <code>storage.scan_job.last_error</code>.
      */
     public final TableField<ScanJobRecord, String> LAST_ERROR = createField(DSL.name("last_error"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>storage.scan_job.version</code>.
+     */
+    public final TableField<ScanJobRecord, Long> VERSION = createField(DSL.name("version"), SQLDataType.BIGINT.nullable(false), this, "");
 
     /**
      * The column <code>storage.scan_job.created_at</code>.
@@ -215,7 +225,9 @@ public class ScanJob extends TableImpl<ScanJobRecord> {
         return Arrays.asList(
             Internal.createCheck(this, DSL.name("scan_job_attempts_check"), "((attempts >= 0))", true),
             Internal.createCheck(this, DSL.name("scan_job_lease_consistent"), "(((((state)::text = 'LEASED'::text) AND (lease_owner IS NOT NULL) AND (lease_expires_at IS NOT NULL)) OR (((state)::text <> 'LEASED'::text) AND (lease_owner IS NULL) AND (lease_expires_at IS NULL))))", true),
-            Internal.createCheck(this, DSL.name("scan_job_state_check"), "(((state)::text = ANY ((ARRAY['PENDING'::character varying, 'LEASED'::character varying, 'DONE'::character varying])::text[])))", true)
+            Internal.createCheck(this, DSL.name("scan_job_queue_check"), "(((queue)::text = ANY ((ARRAY['SMALL'::character varying, 'LARGE'::character varying])::text[])))", true),
+            Internal.createCheck(this, DSL.name("scan_job_state_check"), "(((state)::text = ANY ((ARRAY['PENDING'::character varying, 'LEASED'::character varying, 'DONE'::character varying])::text[])))", true),
+            Internal.createCheck(this, DSL.name("scan_job_version_check"), "((version >= 0))", true)
         );
     }
 
