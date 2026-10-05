@@ -152,3 +152,17 @@ To get started with this step, I'd like us to move forward step by step.
 ### Decisions (author's answers)
 - Scan lease: 30 s, renewed by a heartbeat, so it does not depend on the file size. The upload deadline is different: nothing renews it while the body streams, so it grows with the declared size (base delay + size / minimum rate, both configurable).
 - scan_job gets a `queue` column (SMALL / LARGE) in a new migration; scan concurrency is capped per queue by configuration and workers claim only when a slot is free.
+
+## Prompt 5b — Storage application layer, persistence and adapters (decisions)
+
+~~~~text
+Decisions taken while building the storage application layer, its persistence and its adapters (author's answers and corrections, in order):
+- The migrations V1 and V2 are edited in place instead of adding a V3, because nothing is deployed (this replaces the "new migration" for the `queue` column above); a single clean schema is kept until the first deployment, and the generated jOOQ code is committed with the schema it comes from.
+- Audit: the actor of a change is recorded in two columns of `file_event` (`actor_type`, `actor_id`) and handed to the repositories as an explicit parameter of `save`, not stored inside the domain events (questioned twice, kept: it is metadata of the event envelope, and the repository cannot write a state without its audit).
+- The authenticated user id travels in a `uid` claim of the JWT and is read through an interface of the shared kernel, so that `auth` and `storage` never depend on each other (enforced by ArchUnit).
+- Domain remarks accepted: `reconstitute` goes through a single full private constructor (no half-built object), and the version lives in a `VersionedAggregateRoot` used by the storage aggregates only, not in the generic aggregate root.
+- A worker claims its jobs in batches, as many as it has free slots, and persists in batches wherever jOOQ allows it. The only database lock is the one of the short claim transaction: during the scan a job is protected by its lease, never by a lock.
+- A job whose file is not in the expected state (inconsistent data) must not fail the rest of the batch: it counts a failed attempt and its file is left alone. Handled now, for the claim and for the reclaim of expired leases, not postponed.
+- A body longer than the declared size is refused with an explicit error as soon as the limit is passed (no `declaredSize + 1` trick); a shorter one is caught when the upload completes.
+- The scan copies the file to the clean zone before the verdict is recorded and clears the quarantine afterwards, so a crash can always be retried from the quarantine.
+~~~~
