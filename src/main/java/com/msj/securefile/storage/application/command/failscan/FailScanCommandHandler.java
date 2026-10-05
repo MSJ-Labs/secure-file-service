@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.failscan;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.SecureFile;
@@ -42,7 +43,8 @@ public class FailScanCommandHandler {
             case EXHAUSTED -> file.failScan(now);
         }
 
-        scanJobRepository.save(job);
-        fileRepository.save(file);
+        Actor actor = new Actor.Worker(command.worker());
+        scanJobRepository.save(job, actor);
+        fileRepository.save(file, actor);
     }
 }

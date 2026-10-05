@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.recordverdict;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.FileStatus;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,7 @@ class RecordScanVerdictCommandHandlerTest {
     private static final FileId FILE_ID = FileId.of(42L);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final WorkerId WORKER = WorkerId.of("worker-1");
+    private static final Actor ACTOR = new Actor.Worker(WORKER);
     private static final String SIGNATURE = "Win.Test.EICAR_HDB-1";
 
     @Mock ScanJobRepository scanJobRepository;
@@ -84,7 +87,7 @@ class RecordScanVerdictCommandHandlerTest {
         handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean()));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getStatus()).isEqualTo(FileStatus.CLEAN);
         assertThat(saved.getValue().getUpdatedAt()).isEqualTo(NOW);
     }
@@ -97,7 +100,7 @@ class RecordScanVerdictCommandHandlerTest {
         handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Infected(SIGNATURE)));
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getStatus()).isEqualTo(FileStatus.INFECTED);
         assertThat(saved.getValue().getInfectionSignature()).contains(SIGNATURE);
     }
@@ -110,7 +113,7 @@ class RecordScanVerdictCommandHandlerTest {
         handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Infected(SIGNATURE)));
 
         ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture());
+        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getState()).isEqualTo(ScanJobState.DONE);
     }
 
@@ -122,8 +125,8 @@ class RecordScanVerdictCommandHandlerTest {
                 handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean())))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(scanJobRepository, never()).save(any());
-        verify(fileRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
+        verify(fileRepository, never()).save(any(), any());
     }
 
     @Test
@@ -134,6 +137,6 @@ class RecordScanVerdictCommandHandlerTest {
                 handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean())))
                 .isInstanceOf(LeaseLostException.class);
 
-        verify(fileRepository, never()).save(any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

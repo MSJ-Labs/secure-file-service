@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.claimscan;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.application.result.ClaimedScan;
@@ -40,8 +41,9 @@ public class ClaimScanCommandHandler {
         job.claim(command.worker(), now, command.lease());
         file.startScan(now);
 
-        scanJobRepository.save(job);
-        fileRepository.save(file);
+        Actor actor = new Actor.Worker(command.worker());
+        scanJobRepository.save(job, actor);
+        fileRepository.save(file, actor);
         return new ClaimedScan(job.id(), job.getFileId(), now.plus(command.lease()));
     }
 }

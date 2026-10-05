@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.reclaimleases;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.FileStatus;
@@ -28,6 +29,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,6 +43,8 @@ class ReclaimExpiredLeasesCommandHandlerTest {
     private static final Instant NOW = CLAIMED_AT.plusSeconds(120);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final int BATCH_SIZE = 50;
+    // The dead worker cannot act: the reaper that takes the job back is the system itself.
+    private static final Actor ACTOR = new Actor.System();
     private static final ScanRetryPolicy RETRYING = new ScanRetryPolicy(3, Duration.ofSeconds(10), Duration.ofMinutes(5));
     private static final ScanRetryPolicy ONE_SHOT = new ScanRetryPolicy(1, Duration.ofSeconds(10), Duration.ofMinutes(5));
 
@@ -77,14 +81,14 @@ class ReclaimExpiredLeasesCommandHandlerTest {
         handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture());
+        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
         assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.PENDING);
         // A worker that dies on a file consumes an attempt, so such a file is not retried forever.
         assertThat(savedJob.getValue().getAttempts()).isEqualTo(1);
         assertThat(savedJob.getValue().getLeaseOwner()).isEmpty();
 
         ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture());
+        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
         assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.PENDING);
     }
 
@@ -95,11 +99,11 @@ class ReclaimExpiredLeasesCommandHandlerTest {
         handlerWith(ONE_SHOT).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         ArgumentCaptor<ScanJob> savedJob = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(savedJob.capture());
+        verify(scanJobRepository).save(savedJob.capture(), eq(ACTOR));
         assertThat(savedJob.getValue().getState()).isEqualTo(ScanJobState.DONE);
 
         ArgumentCaptor<SecureFile> savedFile = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(savedFile.capture());
+        verify(fileRepository).save(savedFile.capture(), eq(ACTOR));
         assertThat(savedFile.getValue().getStatus()).isEqualTo(FileStatus.SCAN_FAILED);
     }
 
@@ -113,8 +117,8 @@ class ReclaimExpiredLeasesCommandHandlerTest {
         int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         assertThat(reclaimed).isEqualTo(2);
-        verify(scanJobRepository, times(2)).save(any());
-        verify(fileRepository, times(2)).save(any());
+        verify(scanJobRepository, times(2)).save(any(), any());
+        verify(fileRepository, times(2)).save(any(), any());
     }
 
     @Test
@@ -124,7 +128,7 @@ class ReclaimExpiredLeasesCommandHandlerTest {
         int reclaimed = handlerWith(RETRYING).handle(new ReclaimExpiredLeasesCommand(BATCH_SIZE));
 
         assertThat(reclaimed).isZero();
-        verify(scanJobRepository, never()).save(any());
-        verify(fileRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

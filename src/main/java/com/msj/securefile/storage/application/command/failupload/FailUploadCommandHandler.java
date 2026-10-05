@@ -1,9 +1,11 @@
 package com.msj.securefile.storage.application.command.failupload;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.exception.SecureFileNotFoundException;
+import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +26,12 @@ public class FailUploadCommandHandler {
 
     @Transactional
     public void handle(FailUploadCommand command) {
-        SecureFile file = fileRepository.findByIdAndOwner(command.fileId(), currentUserProvider.currentOwner())
+        OwnerId owner = currentUserProvider.currentOwner();
+        SecureFile file = fileRepository.findByIdAndOwner(command.fileId(), owner)
                 .orElseThrow(SecureFileNotFoundException::new);
 
         file.failUpload(command.reason(), clock.instant());
 
-        fileRepository.save(file);
+        fileRepository.save(file, new Actor.User(owner));
     }
 }

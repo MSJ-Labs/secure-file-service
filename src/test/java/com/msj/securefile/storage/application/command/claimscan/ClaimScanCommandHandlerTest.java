@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.claimscan;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.application.result.ClaimedScan;
@@ -28,6 +29,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,7 @@ class ClaimScanCommandHandlerTest {
     private static final FileId FILE_ID = FileId.of(42L);
     private static final ScanJobId JOB_ID = ScanJobId.of(99L);
     private static final WorkerId WORKER = WorkerId.of("worker-1");
+    private static final Actor ACTOR = new Actor.Worker(WORKER);
     private static final ClaimScanCommand COMMAND = new ClaimScanCommand(ScanQueue.SMALL, WORKER, LEASE);
 
     @Mock ScanJobRepository scanJobRepository;
@@ -74,7 +77,7 @@ class ClaimScanCommandHandlerTest {
         handler.handle(COMMAND);
 
         ArgumentCaptor<ScanJob> saved = ArgumentCaptor.forClass(ScanJob.class);
-        verify(scanJobRepository).save(saved.capture());
+        verify(scanJobRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getState()).isEqualTo(ScanJobState.LEASED);
         assertThat(saved.getValue().getLeaseOwner()).contains(WORKER);
         assertThat(saved.getValue().getLeaseExpiresAt()).contains(NOW.plus(LEASE));
@@ -87,7 +90,7 @@ class ClaimScanCommandHandlerTest {
         handler.handle(COMMAND);
 
         ArgumentCaptor<SecureFile> saved = ArgumentCaptor.forClass(SecureFile.class);
-        verify(fileRepository).save(saved.capture());
+        verify(fileRepository).save(saved.capture(), eq(ACTOR));
         assertThat(saved.getValue().getStatus()).isEqualTo(FileStatus.SCANNING);
         assertThat(saved.getValue().getUpdatedAt()).isEqualTo(NOW);
     }
@@ -108,7 +111,7 @@ class ClaimScanCommandHandlerTest {
         Optional<ClaimedScan> result = handler.handle(COMMAND);
 
         assertThat(result).isEmpty();
-        verify(scanJobRepository, never()).save(any());
-        verify(fileRepository, never()).save(any());
+        verify(scanJobRepository, never()).save(any(), any());
+        verify(fileRepository, never()).save(any(), any());
     }
 }

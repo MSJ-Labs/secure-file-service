@@ -1,11 +1,13 @@
 package com.msj.securefile.storage.application.command.initiateupload;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.IdGenerator;
 import com.msj.securefile.storage.application.result.InitiatedUpload;
 import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.UploadTimeoutPolicy;
+import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,16 +32,18 @@ public class InitiateUploadCommandHandler {
     public InitiatedUpload handle(InitiateUploadCommand command) {
         Instant now = clock.instant();
 
+        OwnerId owner = currentUserProvider.currentOwner();
+
         SecureFile file = SecureFile.initiate(
                 idGenerator.nextFileId(),
-                currentUserProvider.currentOwner(),
+                owner,
                 command.name(),
                 command.declaredSize(),
                 now,
                 uploadTimeoutPolicy.deadline(now, command.declaredSize())
         );
 
-        fileRepository.save(file);
+        fileRepository.save(file, new Actor.User(owner));
         return new InitiatedUpload(file.id().asString(), file.getUploadExpiresAt());
     }
 }

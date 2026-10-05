@@ -1,5 +1,6 @@
 package com.msj.securefile.storage.application.command.reclaimleases;
 
+import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.ScanJobRepository;
 import com.msj.securefile.storage.domain.file.SecureFile;
@@ -49,7 +50,9 @@ public class ReclaimExpiredLeasesCommandHandler {
             case EXHAUSTED -> file.failScan(now);
         }
 
-        scanJobRepository.save(job);
-        fileRepository.save(file);
+        // The dead worker cannot act: the reaper that takes the job back is the system itself.
+        Actor actor = new Actor.System();
+        scanJobRepository.save(job, actor);
+        fileRepository.save(file, actor);
     }
 }
