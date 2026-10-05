@@ -48,7 +48,7 @@ com.msj.securefile
 ├── storage                       file upload, quarantine, scan: domain implemented (see "Storage domain" below);
 │                                 application, infrastructure and api are planned
 ├── shared
-│   ├── domain                    DDD building blocks: AggregateRoot, Entity, ValueObject, DomainEvent
+│   ├── domain                    DDD building blocks: AggregateRoot, VersionedAggregateRoot, Entity, ValueObject, DomainEvent
 │   └── infrastructure.persistence.jooq   generated jOOQ code (committed), one package per schema
 └── config                        Spring configuration (security, OpenAPI, Clock)
 ```

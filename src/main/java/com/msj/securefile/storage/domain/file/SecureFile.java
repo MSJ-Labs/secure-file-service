@@ -1,6 +1,6 @@
 package com.msj.securefile.storage.domain.file;
 
-import com.msj.securefile.shared.domain.AggregateRoot;
+import com.msj.securefile.shared.domain.VersionedAggregateRoot;
 import com.msj.securefile.storage.domain.file.event.*;
 import com.msj.securefile.storage.domain.file.exception.FileNotDownloadableException;
 import com.msj.securefile.storage.domain.file.exception.FileNotUploadableException;
@@ -19,7 +19,7 @@ import java.util.Optional;
  * scan verdict; the queue details of the scan live in the scan job.
  */
 @Getter
-public class SecureFile extends AggregateRoot<FileId> {
+public class SecureFile extends VersionedAggregateRoot<FileId> {
 
     // Matches the VARCHAR(255) column: fail in the domain rather than in the database.
     private static final int MAX_NAME_LENGTH = 255;
@@ -40,8 +40,8 @@ public class SecureFile extends AggregateRoot<FileId> {
     private Instant updatedAt;
 
     private SecureFile(FileId id, OwnerId owner, String name, long declaredSize, FileStatus status,
-                       Instant uploadExpiresAt, Instant createdAt, Instant updatedAt) {
-        super(id);
+                       Instant uploadExpiresAt, Instant createdAt, Instant updatedAt, long version) {
+        super(id, version);
         this.owner = owner;
         this.name = name;
         this.declaredSize = declaredSize;
@@ -66,8 +66,23 @@ public class SecureFile extends AggregateRoot<FileId> {
         }
 
         SecureFile file = new SecureFile(id, owner, trimmed, declaredSize, FileStatus.UPLOADING,
-                uploadExpiresAt, now, now);
+                uploadExpiresAt, now, now, 0L);
         file.registerEvent(new FileUploadStarted(id, owner, trimmed, declaredSize, now));
+        return file;
+    }
+
+    /**
+     * Rebuilds a stored file: no rule is applied and no event is recorded, the persisted state is trusted as is.
+     */
+    public static SecureFile reconstitute(FileId id, OwnerId owner, String name, long declaredSize,
+                                          FileStatus status, Sha256 sha256, Instant uploadExpiresAt,
+                                          UploadFailureReason failureReason, String infectionSignature,
+                                          Instant createdAt, Instant updatedAt, long version) {
+        SecureFile file = new SecureFile(id, owner, name, declaredSize, status, uploadExpiresAt,
+                createdAt, updatedAt, version);
+        file.sha256 = sha256;
+        file.failureReason = failureReason;
+        file.infectionSignature = infectionSignature;
         return file;
     }
 

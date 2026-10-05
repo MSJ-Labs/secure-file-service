@@ -12,4 +12,9 @@ public record FileId(TSID value) implements ValueObject {
     public static FileId of(long value) {
         return new FileId(TSID.from(value));
     }
+
+    // Lets the outer layers print the id without touching the TSID type.
+    public String asString() {
+        return value.toString();
+    }
 }
