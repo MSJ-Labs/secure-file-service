@@ -57,8 +57,8 @@ public class LoginCommandHandler {
         user.recordSuccessfulLogin(now);
         userRepository.save(user);
 
-        String accessToken = tokenService.generateAccessToken(user.getUsername(), user.getRoles());
-        String refreshToken = tokenService.generateRefreshToken(user.getUsername(), user.getRoles());
+        String accessToken = tokenService.generateAccessToken(user.getId(), user.getUsername(), user.getRoles());
+        String refreshToken = tokenService.generateRefreshToken(user.getId(), user.getUsername(), user.getRoles());
 
         refreshTokenRepository.save(
                 TokenHasher.hash(refreshToken),

@@ -43,8 +43,9 @@ class LoginCommandHandlerTest {
         when(userRepository.findByUsername("jdoe")).thenReturn(Optional.of(activeUser));
         when(passwordHasher.matches("pass", "$hashed$")).thenReturn(true);
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(tokenService.generateAccessToken(eq("jdoe"), any())).thenReturn("access-token");
-        when(tokenService.generateRefreshToken(eq("jdoe"), any())).thenReturn("refresh-token");
+        // Both tokens carry the id of the account, so the other contexts can tell who the caller is.
+        when(tokenService.generateAccessToken(eq(activeUser.getId()), eq("jdoe"), any())).thenReturn("access-token");
+        when(tokenService.generateRefreshToken(eq(activeUser.getId()), eq("jdoe"), any())).thenReturn("refresh-token");
         when(tokenService.getExpirationFromToken("refresh-token")).thenReturn(LocalDateTime.now().plusDays(7));
 
         LoginResult result = handler.handle(new LoginCommand("jdoe", "pass"));

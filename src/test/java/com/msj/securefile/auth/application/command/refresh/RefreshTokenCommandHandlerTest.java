@@ -4,6 +4,7 @@ import com.msj.securefile.auth.application.port.out.RefreshTokenRepository;
 import com.msj.securefile.auth.application.port.out.TokenService;
 import com.msj.securefile.auth.application.port.out.UserRepository;
 import com.msj.securefile.auth.domain.token.InvalidRefreshTokenException;
+import com.msj.securefile.auth.domain.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,9 +46,12 @@ class RefreshTokenCommandHandlerTest {
 
     @Test
     void handle_validToken_returnsNewAccessTokenWithTheRolesOfTheAccount() {
+        User account = activeUser("jdoe");
         givenAValidRefreshTokenOf("jdoe");
-        when(userRepository.findByUsername("jdoe")).thenReturn(Optional.of(activeUser("jdoe")));
-        when(tokenService.generateAccessToken("jdoe", Set.of("ROLE_USER"))).thenReturn("new-access-token");
+        when(userRepository.findByUsername("jdoe")).thenReturn(Optional.of(account));
+        // The new access token carries the id of the account, like the one issued at login.
+        when(tokenService.generateAccessToken(account.getId(), "jdoe", Set.of("ROLE_USER")))
+                .thenReturn("new-access-token");
 
         String result = handler.handle(new RefreshTokenCommand("valid-refresh"));
 
@@ -82,7 +86,7 @@ class RefreshTokenCommandHandlerTest {
         RefreshTokenCommand command = new RefreshTokenCommand("valid-refresh");
 
         assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(InvalidRefreshTokenException.class);
-        verify(tokenService, never()).generateAccessToken(anyString(), any());
+        verify(tokenService, never()).generateAccessToken(any(), anyString(), any());
     }
 
     @Test
@@ -92,7 +96,7 @@ class RefreshTokenCommandHandlerTest {
         RefreshTokenCommand command = new RefreshTokenCommand("valid-refresh");
 
         assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(InvalidRefreshTokenException.class);
-        verify(tokenService, never()).generateAccessToken(anyString(), any());
+        verify(tokenService, never()).generateAccessToken(any(), anyString(), any());
     }
 
     @Test
@@ -102,6 +106,6 @@ class RefreshTokenCommandHandlerTest {
         RefreshTokenCommand command = new RefreshTokenCommand("valid-refresh");
 
         assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(InvalidRefreshTokenException.class);
-        verify(tokenService, never()).generateAccessToken(anyString(), any());
+        verify(tokenService, never()).generateAccessToken(any(), anyString(), any());
     }
 }

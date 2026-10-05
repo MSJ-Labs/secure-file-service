@@ -1,6 +1,7 @@
 package com.msj.securefile.auth.infrastructure.security;
 
 import com.msj.securefile.auth.application.port.out.TokenService;
+import com.msj.securefile.auth.domain.user.UserId;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -23,6 +25,7 @@ import java.util.Set;
 public class JwtTokenProvider implements TokenService {
 
     private static final String CLAIM_ROLES = "roles";
+    private static final String CLAIM_USER_ID = "uid";
 
     private final SecretKey signingKey;
     private final long accessTokenExpirationMs;
@@ -40,10 +43,11 @@ public class JwtTokenProvider implements TokenService {
     }
 
     @Override
-    public String generateAccessToken(String username, Set<String> roles) {
+    public String generateAccessToken(UserId userId, String username, Set<String> roles) {
         Instant now = clock.instant();
         return Jwts.builder()
                 .subject(username)
+                .claim(CLAIM_USER_ID, userId.asString())
                 .claim("type", "access")
                 .claim(CLAIM_ROLES, roles)
                 .issuedAt(Date.from(now))
@@ -53,10 +57,11 @@ public class JwtTokenProvider implements TokenService {
     }
 
     @Override
-    public String generateRefreshToken(String username, Set<String> roles) {
+    public String generateRefreshToken(UserId userId, String username, Set<String> roles) {
         Instant now = clock.instant();
         return Jwts.builder()
                 .subject(username)
+                .claim(CLAIM_USER_ID, userId.asString())
                 .claim("type", "refresh")
                 .claim(CLAIM_ROLES, roles)
                 .issuedAt(Date.from(now))
@@ -68,6 +73,11 @@ public class JwtTokenProvider implements TokenService {
     @Override
     public String getUsernameFromToken(String token) {
         return parseClaims(token).getSubject();
+    }
+
+    @Override
+    public Optional<UserId> getUserIdFromToken(String token) {
+        return Optional.ofNullable(parseClaims(token).get(CLAIM_USER_ID, String.class)).map(UserId::of);
     }
 
     @Override
