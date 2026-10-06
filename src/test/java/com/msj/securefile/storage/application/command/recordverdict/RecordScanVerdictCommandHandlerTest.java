@@ -121,8 +121,9 @@ class RecordScanVerdictCommandHandlerTest {
     void handle_recordsNothingWhenAnotherWorkerHoldsTheLease() {
         givenAScanInProgress(WorkerId.of("worker-2"));
 
-        assertThatThrownBy(() ->
-                handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean())))
+        RecordScanVerdictCommand command = new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean());
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(scanJobRepository, never()).save(any(), any());
@@ -133,8 +134,9 @@ class RecordScanVerdictCommandHandlerTest {
     void handle_tellsTheWorkerItLostTheLeaseWhenTheJobDoesNotExist() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() ->
-                handler.handle(new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean())))
+        RecordScanVerdictCommand command = new RecordScanVerdictCommand(JOB_ID, WORKER, new ScanVerdict.Clean());
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(fileRepository, never()).save(any(), any());

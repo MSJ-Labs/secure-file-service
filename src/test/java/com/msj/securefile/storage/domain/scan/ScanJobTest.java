@@ -111,7 +111,9 @@ class ScanJobTest {
         ScanJob job = leased();
 
         assertThatThrownBy(() -> job.renew(OTHER_WORKER, NOW, LEASE)).isInstanceOf(LeaseLostException.class);
-        assertThatThrownBy(() -> created().renew(WORKER, NOW, LEASE)).isInstanceOf(LeaseLostException.class);
+        ScanJob notLeased = created();
+
+        assertThatThrownBy(() -> notLeased.renew(WORKER, NOW, LEASE)).isInstanceOf(LeaseLostException.class);
         assertThat(job.getLeaseExpiresAt()).contains(NOW.plus(LEASE));
     }
 
@@ -198,7 +200,9 @@ class ScanJobTest {
         ScanJob job = leased();
 
         assertThatThrownBy(() -> job.fail(OTHER_WORKER, ERROR, NOW, POLICY)).isInstanceOf(LeaseLostException.class);
-        assertThatThrownBy(() -> created().fail(WORKER, ERROR, NOW, POLICY)).isInstanceOf(LeaseLostException.class);
+        ScanJob notLeased = created();
+
+        assertThatThrownBy(() -> notLeased.fail(WORKER, ERROR, NOW, POLICY)).isInstanceOf(LeaseLostException.class);
         assertThat(job.getState()).isEqualTo(ScanJobState.LEASED);
         assertThat(job.getAttempts()).isZero();
     }

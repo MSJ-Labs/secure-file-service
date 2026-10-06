@@ -52,8 +52,8 @@ class S3ConfigTest {
             S3Client client = context.getBean(S3Client.class);
 
             // LocalStack and most S3-compatible stores have no wildcard DNS: the bucket goes in the path.
-            assertThat(client.utilities().getUrl(request -> request.bucket("incoming").key("42")).toString())
-                    .isEqualTo("http://s3.example.test:9000/incoming/42");
+            assertThat(client.utilities().getUrl(request -> request.bucket("incoming").key("42")))
+                    .hasToString("http://s3.example.test:9000/incoming/42");
         });
     }
 

@@ -99,7 +99,9 @@ class InitiateUploadCommandHandlerTest {
         when(currentUserProvider.currentOwner()).thenReturn(OWNER);
         when(idGenerator.nextFileId()).thenReturn(FILE_ID);
 
-        assertThatThrownBy(() -> handler.handle(new InitiateUploadCommand(" ", 10)))
+        InitiateUploadCommand blankName = new InitiateUploadCommand(" ", 10);
+
+        assertThatThrownBy(() -> handler.handle(blankName))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(fileRepository, never()).save(any(), any());

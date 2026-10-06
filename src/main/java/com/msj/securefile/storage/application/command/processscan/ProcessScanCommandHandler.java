@@ -43,7 +43,7 @@ public class ProcessScanCommandHandler {
         ScanVerdict verdict;
         try {
             verdict = scan(command.fileId());
-        } catch (ScannerUnavailableException e) {
+        } catch (ScannerUnavailableException _) {
             // Nothing is known about the file: hand the job back without consuming an attempt.
             releaseScan.handle(new ReleaseScanCommand(command.jobId(), command.worker(), command.unavailableDelay()));
             return;

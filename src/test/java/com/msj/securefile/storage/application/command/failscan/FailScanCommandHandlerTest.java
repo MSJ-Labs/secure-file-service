@@ -117,7 +117,10 @@ class FailScanCommandHandlerTest {
     void handle_recordsNothingWhenAnotherWorkerHoldsTheLease() {
         givenAScanInProgress(WorkerId.of("worker-2"));
 
-        assertThatThrownBy(() -> handlerWith(RETRYING).handle(new FailScanCommand(JOB_ID, WORKER, ERROR)))
+        FailScanCommandHandler handler = handlerWith(RETRYING);
+        FailScanCommand command = new FailScanCommand(JOB_ID, WORKER, ERROR);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(scanJobRepository, never()).save(any(), any());
@@ -128,7 +131,10 @@ class FailScanCommandHandlerTest {
     void handle_tellsTheWorkerItLostTheLeaseWhenTheJobDoesNotExist() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handlerWith(RETRYING).handle(new FailScanCommand(JOB_ID, WORKER, ERROR)))
+        FailScanCommandHandler handler = handlerWith(RETRYING);
+        FailScanCommand command = new FailScanCommand(JOB_ID, WORKER, ERROR);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(fileRepository, never()).save(any(), any());

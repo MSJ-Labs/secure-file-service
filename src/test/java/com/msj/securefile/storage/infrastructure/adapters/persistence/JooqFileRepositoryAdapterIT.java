@@ -231,7 +231,9 @@ class JooqFileRepositoryAdapterIT {
         stale.failUpload(UploadFailureReason.TIMEOUT, LATER);
 
         // The caller's transaction rolls the healthy file back with it: nothing of the batch must stand.
-        assertThatThrownBy(() -> repository.saveAll(List.of(healthy, stale), SYSTEM))
+        List<SecureFile> batch = List.of(healthy, stale);
+
+        assertThatThrownBy(() -> repository.saveAll(batch, SYSTEM))
                 .isInstanceOf(ConcurrentUpdateException.class);
     }
 

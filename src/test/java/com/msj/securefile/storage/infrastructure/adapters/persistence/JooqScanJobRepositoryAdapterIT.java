@@ -156,7 +156,9 @@ class JooqScanJobRepositoryAdapterIT {
         // Two workers loaded the same pending job: only the first claim may stand.
         second.claim(WorkerId.of("worker-2"), LATER, LEASE);
 
-        assertThatThrownBy(() -> repository.save(second, new Actor.Worker(WorkerId.of("worker-2"))))
+        Actor secondWorker = new Actor.Worker(WorkerId.of("worker-2"));
+
+        assertThatThrownBy(() -> repository.save(second, secondWorker))
                 .isInstanceOf(ConcurrentUpdateException.class);
         assertThat(repository.findById(ScanJobId.of(1L)).orElseThrow().getLeaseOwner()).contains(WORKER);
     }
@@ -263,7 +265,9 @@ class JooqScanJobRepositoryAdapterIT {
         healthy.claim(WORKER, LATER, LEASE);
         stale.claim(WORKER, LATER, LEASE);
 
-        assertThatThrownBy(() -> repository.saveAll(List.of(healthy, stale), ACTOR))
+        List<ScanJob> batch = List.of(healthy, stale);
+
+        assertThatThrownBy(() -> repository.saveAll(batch, ACTOR))
                 .isInstanceOf(ConcurrentUpdateException.class);
     }
 

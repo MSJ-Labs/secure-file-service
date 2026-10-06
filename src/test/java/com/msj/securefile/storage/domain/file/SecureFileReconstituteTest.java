@@ -21,13 +21,13 @@ class SecureFileReconstituteTest {
     private static final OwnerId OWNER = OwnerId.of(7L);
 
     private static SecureFile storedInfectedFile() {
-        return SecureFile.reconstitute(ID, OWNER, "report.pdf", 1_024, FileStatus.INFECTED, DIGEST, EXPIRES,
-                null, SIGNATURE, CREATED, UPDATED, 5L);
+        return SecureFile.reconstitute(new FileSnapshot(ID, OWNER, "report.pdf", 1_024, FileStatus.INFECTED, DIGEST,
+                EXPIRES, null, SIGNATURE, CREATED, UPDATED, 5L));
     }
 
     private static SecureFile storedUploadingFile() {
-        return SecureFile.reconstitute(ID, OWNER, "report.pdf", 1_024, FileStatus.UPLOADING, null, EXPIRES,
-                null, null, CREATED, CREATED, 1L);
+        return SecureFile.reconstitute(new FileSnapshot(ID, OWNER, "report.pdf", 1_024, FileStatus.UPLOADING, null,
+                EXPIRES, null, null, CREATED, CREATED, 1L));
     }
 
     @Test
@@ -63,8 +63,8 @@ class SecureFileReconstituteTest {
 
     @Test
     void reconstitute_exposesTheFailureReasonOfAFailedUpload() {
-        SecureFile file = SecureFile.reconstitute(ID, OWNER, "report.pdf", 1_024, FileStatus.UPLOAD_FAILED, null,
-                EXPIRES, UploadFailureReason.TIMEOUT, null, CREATED, UPDATED, 2L);
+        SecureFile file = SecureFile.reconstitute(new FileSnapshot(ID, OWNER, "report.pdf", 1_024,
+                FileStatus.UPLOAD_FAILED, null, EXPIRES, UploadFailureReason.TIMEOUT, null, CREATED, UPDATED, 2L));
 
         assertThat(file.getFailureReason()).contains(UploadFailureReason.TIMEOUT);
     }

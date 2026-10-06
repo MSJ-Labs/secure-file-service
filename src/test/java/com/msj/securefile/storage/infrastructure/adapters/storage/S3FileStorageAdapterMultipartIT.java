@@ -69,7 +69,7 @@ class S3FileStorageAdapterMultipartIT {
         try {
             s3.headObject(request -> request.bucket(LocalStackTestS3.QUARANTINE_BUCKET).key(ID.asString()));
             return true;
-        } catch (NoSuchKeyException e) {
+        } catch (NoSuchKeyException _) {
             return false;
         }
     }
@@ -122,8 +122,9 @@ class S3FileStorageAdapterMultipartIT {
 
     @Test
     void store_stopsInTheMiddleOfAnUploadThatPassesTheLimitAndLeavesNothing() {
-        assertThatThrownBy(() -> storage.store(StorageZone.QUARANTINE, ID,
-                new ByteArrayInputStream(bytes(12 * MIB)), 7L * MIB))
+        InputStream tooLong = new ByteArrayInputStream(bytes(12 * MIB));
+
+        assertThatThrownBy(() -> storage.store(StorageZone.QUARANTINE, ID, tooLong, 7L * MIB))
                 .isInstanceOf(UploadTooLargeException.class);
 
         assertThat(exists()).isFalse();
@@ -154,8 +155,9 @@ class S3FileStorageAdapterMultipartIT {
         S3FileStorageAdapter withoutBucket = new S3FileStorageAdapter(s3,
                 new S3StorageSettings("no-such-bucket", "no-such-bucket", 5 * MIB));
 
-        assertThatThrownBy(() -> withoutBucket.store(StorageZone.QUARANTINE, ID,
-                new ByteArrayInputStream(bytes(12 * MIB)), NO_LIMIT))
+        InputStream content = new ByteArrayInputStream(bytes(12 * MIB));
+
+        assertThatThrownBy(() -> withoutBucket.store(StorageZone.QUARANTINE, ID, content, NO_LIMIT))
                 .isInstanceOf(FileStorageException.class);
     }
 }
