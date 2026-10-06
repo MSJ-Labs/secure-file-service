@@ -29,6 +29,13 @@ import java.util.Map;
 @Component
 public class AuditEventMapper {
 
+    // The keys of the payloads, stored forever like the event type names: spelled out once and shared.
+    private static final String WORKER = "worker";
+    private static final String ATTEMPT_NUMBER = "attemptNumber";
+    private static final String CAUSE = "cause";
+    private static final String ERROR = "error";
+    private static final String NEXT_ATTEMPT_AT = "nextAttemptAt";
+
     public AuditEvent map(DomainEvent event) {
         if (event instanceof FileEvent fileEvent) {
             return mapFileEvent(fileEvent);
@@ -62,24 +69,24 @@ public class AuditEventMapper {
         return switch (event) {
             case ScanJobCreated e -> ofScanJob(e, "ScanJobCreated", Map.of("queue", e.queue().name()));
             case ScanClaimed e -> ofScanJob(e, "ScanClaimed", Map.of(
-                    "worker", e.worker().value(),
-                    "attemptNumber", e.attemptNumber(),
+                    WORKER, e.worker().value(),
+                    ATTEMPT_NUMBER, e.attemptNumber(),
                     "leaseExpiresAt", e.leaseExpiresAt().toString()));
             case ScanRetryScheduled e -> ofScanJob(e, "ScanRetryScheduled", Map.of(
-                    "worker", e.worker().value(),
-                    "attemptNumber", e.attemptNumber(),
-                    "cause", e.cause().name(),
-                    "error", e.error(),
-                    "nextAttemptAt", e.nextAttemptAt().toString()));
+                    WORKER, e.worker().value(),
+                    ATTEMPT_NUMBER, e.attemptNumber(),
+                    CAUSE, e.cause().name(),
+                    ERROR, e.error(),
+                    NEXT_ATTEMPT_AT, e.nextAttemptAt().toString()));
             case ScanAbandoned e -> ofScanJob(e, "ScanAbandoned", Map.of(
-                    "worker", e.worker().value(),
-                    "attemptNumber", e.attemptNumber(),
-                    "cause", e.cause().name(),
-                    "error", e.error()));
+                    WORKER, e.worker().value(),
+                    ATTEMPT_NUMBER, e.attemptNumber(),
+                    CAUSE, e.cause().name(),
+                    ERROR, e.error()));
             case ScanReleased e -> ofScanJob(e, "ScanReleased", Map.of(
-                    "worker", e.worker().value(),
-                    "nextAttemptAt", e.nextAttemptAt().toString()));
-            case ScanJobCompleted e -> ofScanJob(e, "ScanJobCompleted", Map.of("worker", e.worker().value()));
+                    WORKER, e.worker().value(),
+                    NEXT_ATTEMPT_AT, e.nextAttemptAt().toString()));
+            case ScanJobCompleted e -> ofScanJob(e, "ScanJobCompleted", Map.of(WORKER, e.worker().value()));
         };
     }
 

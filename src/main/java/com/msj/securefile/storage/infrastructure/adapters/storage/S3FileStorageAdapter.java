@@ -179,8 +179,10 @@ public class S3FileStorageAdapter implements FileStoragePort {
         }
 
         void write(byte[] source, int offset, int count) {
-            if (length + count > data.length) {
-                data = Arrays.copyOf(data, (int) Math.min(capacity, Math.max(2L * data.length, length + count)));
+            long needed = (long) length + count;
+            if (needed > data.length) {
+                // Doubles, but never below what is needed and never above the part size.
+                data = Arrays.copyOf(data, (int) Math.clamp(2L * data.length, needed, capacity));
             }
             System.arraycopy(source, offset, data, length, count);
             length += count;

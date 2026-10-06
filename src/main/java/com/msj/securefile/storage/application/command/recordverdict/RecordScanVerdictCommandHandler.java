@@ -36,8 +36,8 @@ public class RecordScanVerdictCommandHandler {
         SecureFile file = fileRepository.findByIdForScan(job.getFileId())
                 .orElseThrow(SecureFileNotFoundException::new);
         switch (command.verdict()) {
-            case ScanVerdict.Clean clean -> file.markClean(now);
-            case ScanVerdict.Infected infected -> file.markInfected(infected.signature(), now);
+            case ScanVerdict.Clean() -> file.markClean(now);
+            case ScanVerdict.Infected(String signature) -> file.markInfected(signature, now);
         }
 
         Actor actor = new Actor.Worker(command.worker());

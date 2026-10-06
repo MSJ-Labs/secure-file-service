@@ -18,6 +18,8 @@ import java.util.Optional;
  * File aggregate root: pure domain object. The single status drives the whole lifecycle, from the upload to the
  * scan verdict; the queue details of the scan live in the scan job.
  */
+// Equal by identity, like every entity (see Entity): the fields below are state, not identity.
+@SuppressWarnings("java:S2160")
 @Getter
 public class SecureFile extends VersionedAggregateRoot<FileId> {
 
@@ -40,20 +42,18 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
     private Instant updatedAt;
 
     // The one constructor: every field is set here, so no instance exists half built. Both factories go through it.
-    private SecureFile(FileId id, OwnerId owner, String name, long declaredSize, FileStatus status, Sha256 sha256,
-                       Instant uploadExpiresAt, UploadFailureReason failureReason, String infectionSignature,
-                       Instant createdAt, Instant updatedAt, long version) {
-        super(id, version);
-        this.owner = owner;
-        this.name = name;
-        this.declaredSize = declaredSize;
-        this.status = status;
-        this.sha256 = sha256;
-        this.uploadExpiresAt = uploadExpiresAt;
-        this.failureReason = failureReason;
-        this.infectionSignature = infectionSignature;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+    private SecureFile(FileSnapshot state) {
+        super(state.id(), state.version());
+        this.owner = state.owner();
+        this.name = state.name();
+        this.declaredSize = state.declaredSize();
+        this.status = state.status();
+        this.sha256 = state.sha256();
+        this.uploadExpiresAt = state.uploadExpiresAt();
+        this.failureReason = state.failureReason();
+        this.infectionSignature = state.infectionSignature();
+        this.createdAt = state.createdAt();
+        this.updatedAt = state.updatedAt();
     }
 
     /**
@@ -70,8 +70,8 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
             throw new IllegalArgumentException("The upload deadline must be in the future");
         }
 
-        SecureFile file = new SecureFile(id, owner, trimmed, declaredSize, FileStatus.UPLOADING, null,
-                uploadExpiresAt, null, null, now, now, 0L);
+        SecureFile file = new SecureFile(new FileSnapshot(id, owner, trimmed, declaredSize, FileStatus.UPLOADING, null,
+                uploadExpiresAt, null, null, now, now, 0L));
         file.registerEvent(new FileUploadStarted(id, owner, trimmed, declaredSize, now));
         return file;
     }
@@ -79,12 +79,8 @@ public class SecureFile extends VersionedAggregateRoot<FileId> {
     /**
      * Rebuilds a stored file: no rule is applied and no event is recorded, the persisted state is trusted as is.
      */
-    public static SecureFile reconstitute(FileId id, OwnerId owner, String name, long declaredSize,
-                                          FileStatus status, Sha256 sha256, Instant uploadExpiresAt,
-                                          UploadFailureReason failureReason, String infectionSignature,
-                                          Instant createdAt, Instant updatedAt, long version) {
-        return new SecureFile(id, owner, name, declaredSize, status, sha256, uploadExpiresAt,
-                failureReason, infectionSignature, createdAt, updatedAt, version);
+    public static SecureFile reconstitute(FileSnapshot state) {
+        return new SecureFile(state);
     }
 
     /**

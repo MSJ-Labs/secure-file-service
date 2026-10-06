@@ -3,6 +3,8 @@ package com.msj.securefile.storage.infrastructure.adapters.persistence.audit;
 import com.msj.securefile.shared.domain.DomainEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.records.FileEventRecord;
 import com.msj.securefile.storage.application.port.out.Actor;
+import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
+import com.msj.securefile.storage.domain.scan.valueobject.WorkerId;
 import io.hypersistence.tsid.TSID;
 import lombok.RequiredArgsConstructor;
 import org.jooq.DSLContext;
@@ -36,7 +38,7 @@ public class FileEventWriter {
 
     @Transactional
     public void append(List<DomainEvent> events, long loadedVersion, Actor actor) {
-        appendAll(List.of(new EventBatch(events, loadedVersion)), actor);
+        write(List.of(new EventBatch(events, loadedVersion)), actor);
     }
 
     /**
@@ -46,6 +48,12 @@ public class FileEventWriter {
      */
     @Transactional
     public void appendAll(List<EventBatch> batches, Actor actor) {
+        write(batches, actor);
+    }
+
+    // Shared by append and appendAll, each with its own transaction: calling a transactional method through this would
+    // bypass the proxy that opens it.
+    private void write(List<EventBatch> batches, Actor actor) {
         // The columns go in as a collection: with ten varargs, jOOQ would pick its fixed-arity overload instead.
         InsertValuesStepN<FileEventRecord> insert = dsl.insertInto(FILE_EVENT).columns(List.of(
                 FILE_EVENT.ID, FILE_EVENT.FILE_ID, FILE_EVENT.AGGREGATE_TYPE, FILE_EVENT.AGGREGATE_ID,
@@ -79,18 +87,18 @@ public class FileEventWriter {
 
     private static String actorType(Actor actor) {
         return switch (actor) {
-            case Actor.User user -> "USER";
-            case Actor.Worker worker -> "WORKER";
-            case Actor.System system -> "SYSTEM";
+            case Actor.User _ -> "USER";
+            case Actor.Worker _ -> "WORKER";
+            case Actor.System _ -> "SYSTEM";
         };
     }
 
     // The system has no id: the column stays empty rather than holding a made-up one.
     private static String actorId(Actor actor) {
         return switch (actor) {
-            case Actor.User user -> user.owner().value().toString();
-            case Actor.Worker worker -> worker.worker().value();
-            case Actor.System system -> null;
+            case Actor.User(OwnerId owner) -> owner.value().toString();
+            case Actor.Worker(WorkerId worker) -> worker.value();
+            case Actor.System _ -> null;
         };
     }
 }

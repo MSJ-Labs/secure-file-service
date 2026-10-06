@@ -44,13 +44,16 @@ class ScanRetryPolicyTest {
 
     @Test
     void constructor_rejectsInconsistentSettings() {
-        assertThatThrownBy(() -> new ScanRetryPolicy(0, Duration.ofSeconds(10), Duration.ofMinutes(5)))
+        Duration tenSeconds = Duration.ofSeconds(10);
+        Duration fiveMinutes = Duration.ofMinutes(5);
+
+        assertThatThrownBy(() -> new ScanRetryPolicy(0, tenSeconds, fiveMinutes))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanRetryPolicy(3, Duration.ZERO, Duration.ofMinutes(5)))
+        assertThatThrownBy(() -> new ScanRetryPolicy(3, Duration.ZERO, fiveMinutes))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanRetryPolicy(3, null, Duration.ofMinutes(5)))
+        assertThatThrownBy(() -> new ScanRetryPolicy(3, null, fiveMinutes))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanRetryPolicy(3, Duration.ofMinutes(5), Duration.ofSeconds(10)))
+        assertThatThrownBy(() -> new ScanRetryPolicy(3, fiveMinutes, tenSeconds))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

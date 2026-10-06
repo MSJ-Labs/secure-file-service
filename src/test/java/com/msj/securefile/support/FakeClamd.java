@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,6 +29,7 @@ public final class FakeClamd implements AutoCloseable {
 
     private final ServerSocket server;
     private final CompletableFuture<Exchange> exchange = new CompletableFuture<>();
+    private final CountDownLatch closed = new CountDownLatch(1);
     private final Behavior behavior;
     private final String response;
 
@@ -119,9 +121,10 @@ public final class FakeClamd implements AutoCloseable {
                 out.flush();
             }
             case STAY_SILENT -> {
+                // Waits for the test to close the server, with a ceiling so a forgotten close cannot hang the build.
                 try {
-                    Thread.sleep(30_000);
-                } catch (InterruptedException e) {
+                    closed.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                 }
             }
@@ -133,9 +136,10 @@ public final class FakeClamd implements AutoCloseable {
 
     @Override
     public void close() {
+        closed.countDown();
         try {
             server.close();
-        } catch (IOException e) {
+        } catch (IOException _) {
             // Nothing to recover: the test is over.
         }
     }
