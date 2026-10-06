@@ -93,14 +93,19 @@ class ClamAvVirusScannerTest {
     void scan_saysTheScannerIsUnavailableWhenNobodyListens() {
         ClamAvVirusScanner scanner = scannerFor(FakeClamd.closedPort(), Duration.ofSeconds(2));
 
+        InputStream content = body(bytes(10));
+
         // Nothing is known about the file: this must not count against it.
-        assertThatThrownBy(() -> scanner.scan(body(bytes(10)))).isInstanceOf(ScannerUnavailableException.class);
+        assertThatThrownBy(() -> scanner.scan(content)).isInstanceOf(ScannerUnavailableException.class);
     }
 
     @Test
     void scan_reportsAFailedScanWhenClamdAnswersWithAnError() {
         try (FakeClamd clamd = FakeClamd.replying("INSTREAM size limit exceeded. ERROR")) {
-            assertThatThrownBy(() -> scannerFor(clamd).scan(body(bytes(1_000))))
+            ClamAvVirusScanner scanner = scannerFor(clamd);
+            InputStream content = body(bytes(1_000));
+
+            assertThatThrownBy(() -> scanner.scan(content))
                     .isInstanceOf(ScanExecutionException.class);
         }
     }
@@ -108,7 +113,10 @@ class ClamAvVirusScannerTest {
     @Test
     void scan_reportsAFailedScanWhenTheAnswerIsNotUnderstood() {
         try (FakeClamd clamd = FakeClamd.replying("something clamd never says")) {
-            assertThatThrownBy(() -> scannerFor(clamd).scan(body(bytes(1_000))))
+            ClamAvVirusScanner scanner = scannerFor(clamd);
+            InputStream content = body(bytes(1_000));
+
+            assertThatThrownBy(() -> scanner.scan(content))
                     .isInstanceOf(ScanExecutionException.class);
         }
     }
@@ -116,7 +124,10 @@ class ClamAvVirusScannerTest {
     @Test
     void scan_reportsAFailedScanWhenClamdHangsUpWithoutAnswering() {
         try (FakeClamd clamd = FakeClamd.hangingUp()) {
-            assertThatThrownBy(() -> scannerFor(clamd).scan(body(bytes(1_000))))
+            ClamAvVirusScanner scanner = scannerFor(clamd);
+            InputStream content = body(bytes(1_000));
+
+            assertThatThrownBy(() -> scanner.scan(content))
                     .isInstanceOf(ScanExecutionException.class);
         }
     }
@@ -126,8 +137,10 @@ class ClamAvVirusScannerTest {
         try (FakeClamd clamd = FakeClamd.neverReplying()) {
             ClamAvVirusScanner scanner = scannerFor(clamd.port(), Duration.ofMillis(300));
 
+            InputStream content = body(bytes(1_000));
+
             // The scanner was reached but the scan did not complete: it counts as an attempt, not as an outage.
-            assertThatThrownBy(() -> scanner.scan(body(bytes(1_000)))).isInstanceOf(ScanExecutionException.class);
+            assertThatThrownBy(() -> scanner.scan(content)).isInstanceOf(ScanExecutionException.class);
         }
     }
 
@@ -140,7 +153,9 @@ class ClamAvVirusScannerTest {
             }
         };
         try (FakeClamd clamd = FakeClamd.replying("stream: OK")) {
-            assertThatThrownBy(() -> scannerFor(clamd).scan(broken)).isInstanceOf(ScanExecutionException.class);
+            ClamAvVirusScanner scanner = scannerFor(clamd);
+
+            assertThatThrownBy(() -> scanner.scan(broken)).isInstanceOf(ScanExecutionException.class);
         }
     }
 }

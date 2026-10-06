@@ -52,7 +52,7 @@ class S3FileStorageAdapterIT {
         try {
             s3.headObject(request -> request.bucket(bucket).key(ID.asString()));
             return true;
-        } catch (NoSuchKeyException e) {
+        } catch (NoSuchKeyException _) {
             return false;
         }
     }
@@ -91,7 +91,9 @@ class S3FileStorageAdapterIT {
 
     @Test
     void store_refusesABodyLongerThanTheLimitAndKeepsNothing() {
-        assertThatThrownBy(() -> storage.store(StorageZone.QUARANTINE, ID, body("hello world"), 5))
+        InputStream tooLong = body("hello world");
+
+        assertThatThrownBy(() -> storage.store(StorageZone.QUARANTINE, ID, tooLong, 5))
                 .isInstanceOf(UploadTooLargeException.class);
 
         assertThat(exists(LocalStackTestS3.QUARANTINE_BUCKET)).isFalse();
@@ -117,7 +119,9 @@ class S3FileStorageAdapterIT {
         S3FileStorageAdapter withoutBucket = new S3FileStorageAdapter(s3,
                 new S3StorageSettings("no-such-bucket", "no-such-bucket", 5 * 1024 * 1024));
 
-        assertThatThrownBy(() -> withoutBucket.store(StorageZone.QUARANTINE, ID, body("hello"), 100))
+        InputStream content = body("hello");
+
+        assertThatThrownBy(() -> withoutBucket.store(StorageZone.QUARANTINE, ID, content, 100))
                 .isInstanceOf(FileStorageException.class);
     }
 

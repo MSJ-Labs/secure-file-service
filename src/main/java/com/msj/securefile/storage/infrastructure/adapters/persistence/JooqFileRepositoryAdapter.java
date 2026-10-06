@@ -5,6 +5,7 @@ import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.
 import com.msj.securefile.storage.application.port.out.Actor;
 import com.msj.securefile.storage.application.port.out.ConcurrentUpdateException;
 import com.msj.securefile.storage.application.port.out.FileRepository;
+import com.msj.securefile.storage.domain.file.FileSnapshot;
 import com.msj.securefile.storage.domain.file.FileStatus;
 import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.UploadFailureReason;
@@ -43,7 +44,7 @@ public class JooqFileRepositoryAdapter implements FileRepository {
     @Override
     @Transactional
     public void save(SecureFile file, Actor actor) {
-        saveAll(List.of(file), actor);
+        write(List.of(file), actor);
     }
 
     /**
@@ -54,6 +55,12 @@ public class JooqFileRepositoryAdapter implements FileRepository {
     @Override
     @Transactional
     public void saveAll(Collection<SecureFile> files, Actor actor) {
+        write(files, actor);
+    }
+
+    // Shared by save and saveAll, each with its own transaction: calling a transactional method through this would
+    // bypass the proxy that opens it.
+    private void write(Collection<SecureFile> files, Actor actor) {
         List<Change> inserts = new ArrayList<>();
         List<Change> updates = new ArrayList<>();
         List<FileEventWriter.EventBatch> events = new ArrayList<>();
@@ -186,7 +193,7 @@ public class JooqFileRepositoryAdapter implements FileRepository {
     }
 
     private SecureFile toFile(FileRecord row) {
-        return SecureFile.reconstitute(
+        return SecureFile.reconstitute(new FileSnapshot(
                 FileId.of(row.getId()),
                 OwnerId.of(row.getOwnerId()),
                 row.getOriginalName(),
@@ -198,6 +205,6 @@ public class JooqFileRepositoryAdapter implements FileRepository {
                 row.getInfectionSignature(),
                 row.getCreatedAt(),
                 row.getUpdatedAt(),
-                row.getVersion());
+                row.getVersion()));
     }
 }

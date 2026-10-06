@@ -26,13 +26,13 @@ class ScanJobReconstituteTest {
     private static final String ERROR = "clamd timed out";
 
     private static ScanJob storedLeasedJob() {
-        return ScanJob.reconstitute(ID, FILE_ID, ScanQueue.LARGE, ScanJobState.LEASED, 1, CREATED,
-                WORKER, LEASE_EXPIRES, ERROR, CREATED, UPDATED, 4L);
+        return ScanJob.reconstitute(new ScanJobSnapshot(ID, FILE_ID, ScanQueue.LARGE, ScanJobState.LEASED, 1, CREATED,
+                WORKER, LEASE_EXPIRES, ERROR, CREATED, UPDATED, 4L));
     }
 
     private static ScanJob storedPendingJob() {
-        return ScanJob.reconstitute(ID, FILE_ID, ScanQueue.SMALL, ScanJobState.PENDING, 0, NEXT_ATTEMPT,
-                null, null, null, CREATED, CREATED, 1L);
+        return ScanJob.reconstitute(new ScanJobSnapshot(ID, FILE_ID, ScanQueue.SMALL, ScanJobState.PENDING, 0,
+                NEXT_ATTEMPT, null, null, null, CREATED, CREATED, 1L));
     }
 
     @Test
@@ -84,7 +84,10 @@ class ScanJobReconstituteTest {
     void reconstitute_restoresTheLeaseOwnerSoAnotherWorkerIsShutOut() {
         ScanJob job = storedLeasedJob();
 
-        assertThatThrownBy(() -> job.complete(WorkerId.of("worker-2"), UPDATED.plusSeconds(10)))
+        WorkerId anotherWorker = WorkerId.of("worker-2");
+        Instant later = UPDATED.plusSeconds(10);
+
+        assertThatThrownBy(() -> job.complete(anotherWorker, later))
                 .isInstanceOf(LeaseLostException.class);
     }
 
@@ -92,7 +95,10 @@ class ScanJobReconstituteTest {
     void reconstitute_restoresTheNextAttemptDateSoAJobIsNotClaimedBeforeItIsDue() {
         ScanJob job = storedPendingJob();
 
-        assertThatThrownBy(() -> job.claim(WORKER, NEXT_ATTEMPT.minusSeconds(1), Duration.ofSeconds(30)))
+        Instant tooEarly = NEXT_ATTEMPT.minusSeconds(1);
+        Duration lease = Duration.ofSeconds(30);
+
+        assertThatThrownBy(() -> job.claim(WORKER, tooEarly, lease))
                 .isInstanceOf(ScanJobNotDueException.class);
     }
 }

@@ -59,7 +59,9 @@ class SecureFileTest {
     // The column is VARCHAR(255): fail in the domain rather than in the database.
     @Test
     void initiate_rejectsANameLongerThan255Characters() {
-        assertThatThrownBy(() -> initiate("a".repeat(256), 1)).isInstanceOf(IllegalArgumentException.class);
+        String tooLongName = "a".repeat(256);
+
+        assertThatThrownBy(() -> initiate(tooLongName, 1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -129,7 +131,9 @@ class SecureFileTest {
     void initiate_rejectsADeadlineThatIsNotInTheFuture() {
         assertThatThrownBy(() -> SecureFile.initiate(ID, OWNER, "report.pdf", 1, NOW, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> SecureFile.initiate(ID, OWNER, "report.pdf", 1, NOW, NOW.minusSeconds(1)))
+        Instant alreadyPast = NOW.minusSeconds(1);
+
+        assertThatThrownBy(() -> SecureFile.initiate(ID, OWNER, "report.pdf", 1, NOW, alreadyPast))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

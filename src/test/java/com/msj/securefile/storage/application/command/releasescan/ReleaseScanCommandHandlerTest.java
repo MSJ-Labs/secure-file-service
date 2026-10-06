@@ -103,7 +103,9 @@ class ReleaseScanCommandHandlerTest {
     void handle_releasesNothingWhenAnotherWorkerHoldsTheLease() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.of(leasedTo(WorkerId.of("worker-2"))));
 
-        assertThatThrownBy(() -> handler.handle(new ReleaseScanCommand(JOB_ID, WORKER, DELAY)))
+        ReleaseScanCommand command = new ReleaseScanCommand(JOB_ID, WORKER, DELAY);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(scanJobRepository, never()).save(any(), any());
@@ -114,7 +116,9 @@ class ReleaseScanCommandHandlerTest {
     void handle_tellsTheWorkerItLostTheLeaseWhenTheJobDoesNotExist() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new ReleaseScanCommand(JOB_ID, WORKER, DELAY)))
+        ReleaseScanCommand command = new ReleaseScanCommand(JOB_ID, WORKER, DELAY);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(fileRepository, never()).save(any(), any());

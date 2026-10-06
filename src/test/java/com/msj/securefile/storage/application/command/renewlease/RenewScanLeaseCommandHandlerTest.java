@@ -69,7 +69,9 @@ class RenewScanLeaseCommandHandlerTest {
     void handle_tellsTheWorkerItLostTheLeaseWhenAnotherWorkerHoldsIt() {
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.of(leasedTo(WorkerId.of("worker-2"))));
 
-        assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
+        RenewScanLeaseCommand command = new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(scanJobRepository, never()).renewLease(any());
@@ -80,7 +82,9 @@ class RenewScanLeaseCommandHandlerTest {
         // From the worker's side a missing job and a lost lease mean the same: stop scanning.
         when(scanJobRepository.findById(JOB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE)))
+        RenewScanLeaseCommand command = new RenewScanLeaseCommand(JOB_ID, WORKER, LEASE);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(LeaseLostException.class);
 
         verify(scanJobRepository, never()).renewLease(any());

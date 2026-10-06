@@ -121,7 +121,9 @@ class CompleteUploadCommandHandlerTest {
         when(currentUserProvider.currentOwner()).thenReturn(OWNER);
         when(fileRepository.findByIdAndOwner(FILE_ID, OWNER)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000)))
+        CompleteUploadCommand command = new CompleteUploadCommand(FILE_ID, DIGEST, 1_000);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
         verify(fileRepository, never()).save(any(), any());
@@ -134,7 +136,9 @@ class CompleteUploadCommandHandlerTest {
         alreadyPending.completeUpload(DIGEST, 1_000, STARTED);
         givenOwnedFile(alreadyPending);
 
-        assertThatThrownBy(() -> handler.handle(new CompleteUploadCommand(FILE_ID, DIGEST, 1_000)))
+        CompleteUploadCommand command = new CompleteUploadCommand(FILE_ID, DIGEST, 1_000);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(InvalidFileTransitionException.class);
 
         verify(fileRepository, never()).save(any(), any());

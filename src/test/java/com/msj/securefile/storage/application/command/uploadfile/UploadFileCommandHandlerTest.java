@@ -51,6 +51,7 @@ class UploadFileCommandHandlerTest {
     private static final long DECLARED_SIZE = 1_000;
     private static final StoredContent STORED = new StoredContent(DECLARED_SIZE, DIGEST);
     private static final InputStream BODY = new ByteArrayInputStream(new byte[]{1, 2, 3});
+    private static final UploadFileCommand COMMAND = new UploadFileCommand(FILE_ID, BODY);
 
     @Mock FileRepository fileRepository;
     @Mock CurrentUserProvider currentUserProvider;
@@ -80,7 +81,7 @@ class UploadFileCommandHandlerTest {
         givenTheCallersFile(uploading());
         when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenReturn(STORED);
 
-        handler.handle(new UploadFileCommand(FILE_ID, BODY));
+        handler.handle(COMMAND);
 
         InOrder order = inOrder(fileStoragePort, completeUpload);
         order.verify(fileStoragePort).store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE);
@@ -93,7 +94,7 @@ class UploadFileCommandHandlerTest {
         when(currentUserProvider.currentOwner()).thenReturn(OWNER);
         when(fileRepository.findByIdAndOwner(FILE_ID, OWNER)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
+        assertThatThrownBy(() -> handler.handle(COMMAND))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
         verify(fileStoragePort, never()).store(any(), any(), any(), anyLong());
@@ -105,7 +106,7 @@ class UploadFileCommandHandlerTest {
         pending.completeUpload(DIGEST, 1_000, NOW);
         givenTheCallersFile(pending);
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
+        assertThatThrownBy(() -> handler.handle(COMMAND))
                 .isInstanceOf(FileNotUploadableException.class);
 
         verify(fileStoragePort, never()).store(any(), any(), any(), anyLong());
@@ -118,7 +119,7 @@ class UploadFileCommandHandlerTest {
         givenTheCallersFile(uploading());
         when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(failure);
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(failure);
+        assertThatThrownBy(() -> handler.handle(COMMAND)).isSameAs(failure);
 
         verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.STORAGE_ERROR));
         verify(fileStoragePort).delete(StorageZone.QUARANTINE, FILE_ID);
@@ -131,7 +132,7 @@ class UploadFileCommandHandlerTest {
         when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenReturn(STORED);
         doThrow(new UploadSizeMismatchException()).when(completeUpload).handle(any());
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY)))
+        assertThatThrownBy(() -> handler.handle(COMMAND))
                 .isInstanceOf(UploadSizeMismatchException.class);
 
         verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.SIZE_MISMATCH));
@@ -145,7 +146,7 @@ class UploadFileCommandHandlerTest {
         // The storage is told never to read more than the declared size: the limit is the caller's own declaration.
         when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(tooLarge);
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(tooLarge);
+        assertThatThrownBy(() -> handler.handle(COMMAND)).isSameAs(tooLarge);
 
         verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.SIZE_MISMATCH));
         verify(fileStoragePort).delete(StorageZone.QUARANTINE, FILE_ID);
@@ -158,7 +159,7 @@ class UploadFileCommandHandlerTest {
         givenTheCallersFile(uploading());
         when(fileStoragePort.store(StorageZone.QUARANTINE, FILE_ID, BODY, DECLARED_SIZE)).thenThrow(interruption);
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(interruption);
+        assertThatThrownBy(() -> handler.handle(COMMAND)).isSameAs(interruption);
 
         // Not a storage error: the client is to blame, which is what the failure reason tells.
         verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.ABORTED));
@@ -174,7 +175,7 @@ class UploadFileCommandHandlerTest {
         doThrow(new FileStorageException(new RuntimeException("delete failed")))
                 .when(fileStoragePort).delete(StorageZone.QUARANTINE, FILE_ID);
 
-        assertThatThrownBy(() -> handler.handle(new UploadFileCommand(FILE_ID, BODY))).isSameAs(failure);
+        assertThatThrownBy(() -> handler.handle(COMMAND)).isSameAs(failure);
 
         verify(failUpload).handle(new FailUploadCommand(FILE_ID, UploadFailureReason.STORAGE_ERROR));
     }

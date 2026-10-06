@@ -19,6 +19,8 @@ import java.util.Optional;
  * The work item of one scan, separate from the file it refers to. A worker holds it through a short lease that a
  * heartbeat keeps extending, so a dead worker is detected within the lease duration whatever the file size.
  */
+// Equal by identity, like every entity (see Entity): the fields below are state, not identity.
+@SuppressWarnings("java:S2160")
 @Getter
 public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
 
@@ -37,27 +39,26 @@ public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
     private Instant updatedAt;
 
     // The one constructor: every field is set here, so no instance exists half built. Both factories go through it.
-    private ScanJob(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
-                    Instant nextAttemptAt, WorkerId leaseOwner, Instant leaseExpiresAt, String lastError,
-                    Instant createdAt, Instant updatedAt, long version) {
-        super(id, version);
-        this.fileId = fileId;
-        this.queue = queue;
-        this.state = state;
-        this.attempts = attempts;
-        this.nextAttemptAt = nextAttemptAt;
-        this.leaseOwner = leaseOwner;
-        this.leaseExpiresAt = leaseExpiresAt;
-        this.lastError = lastError;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+    private ScanJob(ScanJobSnapshot snapshot) {
+        super(snapshot.id(), snapshot.version());
+        this.fileId = snapshot.fileId();
+        this.queue = snapshot.queue();
+        this.state = snapshot.state();
+        this.attempts = snapshot.attempts();
+        this.nextAttemptAt = snapshot.nextAttemptAt();
+        this.leaseOwner = snapshot.leaseOwner();
+        this.leaseExpiresAt = snapshot.leaseExpiresAt();
+        this.lastError = snapshot.lastError();
+        this.createdAt = snapshot.createdAt();
+        this.updatedAt = snapshot.updatedAt();
     }
 
     public static ScanJob create(ScanJobId id, FileId fileId, ScanQueue queue, Instant now) {
         if (fileId == null) throw new IllegalArgumentException("File is required");
         if (queue == null) throw new IllegalArgumentException("Queue is required");
 
-        ScanJob job = new ScanJob(id, fileId, queue, ScanJobState.PENDING, 0, now, null, null, null, now, now, 0L);
+        ScanJob job = new ScanJob(new ScanJobSnapshot(id, fileId, queue, ScanJobState.PENDING, 0, now,
+                null, null, null, now, now, 0L));
         job.registerEvent(new ScanJobCreated(id, fileId, queue, now));
         return job;
     }
@@ -65,11 +66,8 @@ public class ScanJob extends VersionedAggregateRoot<ScanJobId> {
     /**
      * Rebuilds a stored job: no rule is applied and no event is recorded, the persisted state is trusted as is.
      */
-    public static ScanJob reconstitute(ScanJobId id, FileId fileId, ScanQueue queue, ScanJobState state, int attempts,
-                                       Instant nextAttemptAt, WorkerId leaseOwner, Instant leaseExpiresAt,
-                                       String lastError, Instant createdAt, Instant updatedAt, long version) {
-        return new ScanJob(id, fileId, queue, state, attempts, nextAttemptAt, leaseOwner, leaseExpiresAt, lastError,
-                createdAt, updatedAt, version);
+    public static ScanJob reconstitute(ScanJobSnapshot snapshot) {
+        return new ScanJob(snapshot);
     }
 
     /**

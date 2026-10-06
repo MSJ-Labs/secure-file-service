@@ -56,7 +56,9 @@ class AggregateRootTest {
         order.happen(new SomethingHappened(NOW));
         List<DomainEvent> events = order.pullDomainEvents();
 
-        assertThatThrownBy(() -> events.add(new SomethingHappened(NOW)))
+        DomainEvent another = new SomethingHappened(NOW);
+
+        assertThatThrownBy(() -> events.add(another))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 

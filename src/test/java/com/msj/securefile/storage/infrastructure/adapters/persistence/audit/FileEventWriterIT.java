@@ -139,7 +139,9 @@ class FileEventWriterIT {
         writer.append(List.of(new FileFoundClean(FILE_ID, NOW)), 0L, USER);
 
         // A second writer that loaded the same version: the unique constraint is what stops it.
-        assertThatThrownBy(() -> writer.append(List.of(new FileFoundClean(FILE_ID, NOW)), 0L, USER))
+        List<DomainEvent> events = List.of(new FileFoundClean(FILE_ID, NOW));
+
+        assertThatThrownBy(() -> writer.append(events, 0L, USER))
                 .isInstanceOf(IntegrityConstraintViolationException.class);
         assertThat(rowsOfTheFile()).hasSize(1);
     }

@@ -74,7 +74,9 @@ class FailUploadCommandHandlerTest {
         when(currentUserProvider.currentOwner()).thenReturn(OWNER);
         when(fileRepository.findByIdAndOwner(FILE_ID, OWNER)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new FailUploadCommand(FILE_ID, UploadFailureReason.ABORTED)))
+        FailUploadCommand command = new FailUploadCommand(FILE_ID, UploadFailureReason.ABORTED);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(SecureFileNotFoundException.class);
 
         verify(fileRepository, never()).save(any(), any());
@@ -87,7 +89,9 @@ class FailUploadCommandHandlerTest {
         when(currentUserProvider.currentOwner()).thenReturn(OWNER);
         when(fileRepository.findByIdAndOwner(FILE_ID, OWNER)).thenReturn(Optional.of(completed));
 
-        assertThatThrownBy(() -> handler.handle(new FailUploadCommand(FILE_ID, UploadFailureReason.STORAGE_ERROR)))
+        FailUploadCommand command = new FailUploadCommand(FILE_ID, UploadFailureReason.STORAGE_ERROR);
+
+        assertThatThrownBy(() -> handler.handle(command))
                 .isInstanceOf(InvalidFileTransitionException.class);
 
         verify(fileRepository, never()).save(any(), any());
