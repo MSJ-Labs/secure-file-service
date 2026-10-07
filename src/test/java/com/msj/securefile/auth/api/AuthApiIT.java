@@ -30,7 +30,9 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "jwt.refresh-token-expiration-ms=604800000",
                 // The storage beans need credentials (no default on purpose). Nothing connects to S3 at startup.
                 "app.storage.s3.access-key=test-only",
-                "app.storage.s3.secret-key=test-only"
+                "app.storage.s3.secret-key=test-only",
+                // No scan worker in the API tests: nothing may move a file out of its state behind their back.
+                "app.worker.enabled=false"
         })
 class AuthApiIT {
 
