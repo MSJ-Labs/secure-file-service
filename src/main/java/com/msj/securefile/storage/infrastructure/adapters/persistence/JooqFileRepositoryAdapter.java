@@ -158,6 +158,16 @@ public class JooqFileRepositoryAdapter implements FileRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SecureFile> findAllByOwner(OwnerId owner) {
+        // The id breaks ties between files created at the same instant: the order stays stable from one call to the next.
+        return dsl.selectFrom(FILE)
+                .where(FILE.OWNER_ID.eq(owner.value().toLong()))
+                .orderBy(FILE.CREATED_AT.desc(), FILE.ID.desc())
+                .fetch(this::toFile);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<SecureFile> findByIdForScan(FileId id) {
         return dsl.selectFrom(FILE)
                 .where(FILE.ID.eq(id.value().toLong()))

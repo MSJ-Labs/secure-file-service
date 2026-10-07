@@ -1,5 +1,6 @@
 package com.msj.securefile.config;
 
+import com.msj.securefile.storage.domain.file.UploadSizePolicy;
 import com.msj.securefile.storage.domain.file.UploadTimeoutPolicy;
 import com.msj.securefile.storage.domain.scan.ScanQueuePolicy;
 import com.msj.securefile.storage.domain.scan.ScanRetryPolicy;
@@ -17,6 +18,7 @@ class StoragePolicyConfigTest {
     private static final String[] PROPERTIES = {
             "app.upload.base-delay=90s",
             "app.upload.min-bytes-per-second=2097152",
+            "app.upload.max-size-bytes=5000",
             "app.scan.small-max-bytes=1000",
             "app.scan.max-attempts=5",
             "app.scan.base-backoff=20s",
@@ -31,6 +33,12 @@ class StoragePolicyConfigTest {
         runner.withPropertyValues(PROPERTIES).run(context ->
                 assertThat(context.getBean(UploadTimeoutPolicy.class))
                         .isEqualTo(new UploadTimeoutPolicy(Duration.ofSeconds(90), 2_097_152)));
+    }
+
+    @Test
+    void uploadSizePolicy_isBoundFromTheProperties() {
+        runner.withPropertyValues(PROPERTIES).run(context ->
+                assertThat(context.getBean(UploadSizePolicy.class)).isEqualTo(new UploadSizePolicy(5_000)));
     }
 
     @Test
@@ -55,10 +63,18 @@ class StoragePolicyConfigTest {
     }
 
     @Test
+    void startup_failsFastWhenTheMaximumSizeIsNotPositive() {
+        runner.withPropertyValues(PROPERTIES).withPropertyValues("app.upload.max-size-bytes=0")
+                .run(context -> assertThat(context.getStartupFailure())
+                        .hasRootCauseInstanceOf(IllegalArgumentException.class));
+    }
+
+    @Test
     void applicationProperties_provideAValidDefaultForEveryPolicy() {
         runner.withInitializer(new ConfigDataApplicationContextInitializer()).run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(UploadTimeoutPolicy.class);
+            assertThat(context).hasSingleBean(UploadSizePolicy.class);
             assertThat(context).hasSingleBean(ScanQueuePolicy.class);
             assertThat(context).hasSingleBean(ScanRetryPolicy.class);
         });

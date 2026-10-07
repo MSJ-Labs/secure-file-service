@@ -13,6 +13,11 @@ public record FileId(TSID value) implements ValueObject {
         return new FileId(TSID.from(value));
     }
 
+    // The inverse of asString: throws IllegalArgumentException for a text that is not a TSID.
+    public static FileId parse(String text) {
+        return new FileId(TSID.from(text));
+    }
+
     // Lets the outer layers print the id without touching the TSID type.
     public String asString() {
         return value.toString();

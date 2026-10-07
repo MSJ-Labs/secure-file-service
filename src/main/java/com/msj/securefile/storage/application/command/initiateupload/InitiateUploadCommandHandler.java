@@ -6,6 +6,7 @@ import com.msj.securefile.storage.application.port.out.FileRepository;
 import com.msj.securefile.storage.application.port.out.IdGenerator;
 import com.msj.securefile.storage.application.result.InitiatedUpload;
 import com.msj.securefile.storage.domain.file.SecureFile;
+import com.msj.securefile.storage.domain.file.UploadSizePolicy;
 import com.msj.securefile.storage.domain.file.UploadTimeoutPolicy;
 import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
 import lombok.RequiredArgsConstructor;
@@ -26,10 +27,14 @@ public class InitiateUploadCommandHandler {
     private final CurrentUserProvider currentUserProvider;
     private final IdGenerator idGenerator;
     private final UploadTimeoutPolicy uploadTimeoutPolicy;
+    private final UploadSizePolicy uploadSizePolicy;
     private final Clock clock;
 
     @Transactional
     public InitiatedUpload handle(InitiateUploadCommand command) {
+        // First of all: a file that is too large must not cost anything, not even a lookup of the caller.
+        uploadSizePolicy.ensureAllowed(command.declaredSize());
+
         Instant now = clock.instant();
 
         OwnerId owner = currentUserProvider.currentOwner();

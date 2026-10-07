@@ -24,6 +24,9 @@ public interface FileRepository {
     // By id and owner on purpose: there is no lookup by id alone, so no handler can forget the ownership check.
     Optional<SecureFile> findByIdAndOwner(FileId id, OwnerId owner);
 
+    // Every file of the owner, newest first.
+    List<SecureFile> findAllByOwner(OwnerId owner);
+
     // For the scan worker, which acts on behalf of the system and has no caller. Never use it for a user request.
     Optional<SecureFile> findByIdForScan(FileId id);
 
