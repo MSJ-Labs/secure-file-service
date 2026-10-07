@@ -61,6 +61,23 @@ class JooqFileRepositoryAdapterIT {
     }
 
     @Test
+    void findAllByOwner_returnsOnlyTheFilesOfThatOwnerNewestFirst() {
+        saved(SecureFile.initiate(FileId.of(1L), OWNER, "old.pdf", 10, NOW, NOW.plusSeconds(3_600)));
+        saved(SecureFile.initiate(FileId.of(2L), OWNER, "new.pdf", 10, LATER, LATER.plusSeconds(3_600)));
+        repository.save(SecureFile.initiate(FileId.of(3L), OTHER_OWNER, "other.pdf", 10, LATER,
+                LATER.plusSeconds(3_600)), new Actor.User(OTHER_OWNER));
+
+        List<SecureFile> files = repository.findAllByOwner(OWNER);
+
+        assertThat(files).extracting(SecureFile::getName).containsExactly("new.pdf", "old.pdf");
+    }
+
+    @Test
+    void findAllByOwner_isEmptyForAnOwnerWithoutFile() {
+        assertThat(repository.findAllByOwner(OTHER_OWNER)).isEmpty();
+    }
+
+    @Test
     void save_thenFind_rebuildsANewFileWithEveryField() {
         SecureFile found = saved(uploading(1L, NOW.plusSeconds(3_600)));
 

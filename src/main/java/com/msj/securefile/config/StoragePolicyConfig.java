@@ -1,5 +1,6 @@
 package com.msj.securefile.config;
 
+import com.msj.securefile.storage.domain.file.UploadSizePolicy;
 import com.msj.securefile.storage.domain.file.UploadTimeoutPolicy;
 import com.msj.securefile.storage.domain.scan.ScanQueuePolicy;
 import com.msj.securefile.storage.domain.scan.ScanRetryPolicy;
@@ -20,7 +21,7 @@ import java.time.Duration;
 public class StoragePolicyConfig {
 
     @ConfigurationProperties(prefix = "app.upload")
-    public record UploadProperties(Duration baseDelay, long minBytesPerSecond) {
+    public record UploadProperties(Duration baseDelay, long minBytesPerSecond, long maxSizeBytes) {
     }
 
     @ConfigurationProperties(prefix = "app.scan")
@@ -30,6 +31,11 @@ public class StoragePolicyConfig {
     @Bean
     UploadTimeoutPolicy uploadTimeoutPolicy(UploadProperties properties) {
         return new UploadTimeoutPolicy(properties.baseDelay(), properties.minBytesPerSecond());
+    }
+
+    @Bean
+    UploadSizePolicy uploadSizePolicy(UploadProperties properties) {
+        return new UploadSizePolicy(properties.maxSizeBytes());
     }
 
     @Bean

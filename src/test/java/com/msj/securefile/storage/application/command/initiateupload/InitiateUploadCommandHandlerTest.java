@@ -7,7 +7,9 @@ import com.msj.securefile.storage.application.port.out.IdGenerator;
 import com.msj.securefile.storage.application.result.InitiatedUpload;
 import com.msj.securefile.storage.domain.file.FileStatus;
 import com.msj.securefile.storage.domain.file.SecureFile;
+import com.msj.securefile.storage.domain.file.UploadSizePolicy;
 import com.msj.securefile.storage.domain.file.UploadTimeoutPolicy;
+import com.msj.securefile.storage.domain.file.exception.FileTooLargeException;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
 import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +39,7 @@ class InitiateUploadCommandHandlerTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     // 60 s + 1 MiB at 1 MiB/s = 61 s: round numbers for the deadline assertion.
     private static final UploadTimeoutPolicy POLICY = new UploadTimeoutPolicy(Duration.ofSeconds(60), 1_048_576);
+    private static final UploadSizePolicy SIZE_LIMIT = new UploadSizePolicy(10_485_760);
     private static final OwnerId OWNER = OwnerId.of(7L);
     // The audit trail records who started the upload: the caller.
     private static final Actor ACTOR = new Actor.User(OWNER);
@@ -50,7 +53,7 @@ class InitiateUploadCommandHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new InitiateUploadCommandHandler(fileRepository, currentUserProvider, idGenerator, POLICY, CLOCK);
+        handler = new InitiateUploadCommandHandler(fileRepository, currentUserProvider, idGenerator, POLICY, SIZE_LIMIT, CLOCK);
     }
 
     @Test
@@ -69,6 +72,15 @@ class InitiateUploadCommandHandlerTest {
         assertThat(file.getDeclaredSize()).isEqualTo(1_048_576);
         assertThat(file.getStatus()).isEqualTo(FileStatus.UPLOADING);
         assertThat(file.getCreatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void handle_refusesAFileLargerThanTheLimitBeforeWritingAnything() {
+        InitiateUploadCommand command = new InitiateUploadCommand("big.bin", 10_485_761);
+
+        assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(FileTooLargeException.class);
+
+        verify(fileRepository, never()).save(any(), any());
     }
 
     @Test
