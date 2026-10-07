@@ -2,7 +2,7 @@
 
 Secure file management microservice: files are uploaded (streamed, up to 2 GB) into a quarantine zone, scanned by ClamAV, and can be downloaded only once they are CLEAN. Each user can only access their own files.
 
-Status: authentication (register, login, refresh, logout, current user) is implemented. Upload/download endpoints are not implemented yet. See `ARCHITECTURE.md` for the design.
+Status: authentication, streamed upload, asynchronous scan (workers) and download of clean files are implemented. A React interface lives in a separate repository, `secure-file-ui`. See `ARCHITECTURE.md` for the design.
 
 ## Prerequisites
 
@@ -69,6 +69,27 @@ curl -b cookies.txt localhost:8080/api/v1/users/me
 
 Other endpoints: `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`. Everything except `/api/v1/auth/**`, `/actuator/health` and the OpenAPI documentation (`/swagger-ui/index.html`, `/v3/api-docs`) requires authentication.
 
+### Trying the files
+
+```bash
+# upload: the body is the file itself, the name is a query parameter (Content-Length is required)
+curl -b cookies.txt -X PUT "localhost:8080/api/v1/files?name=report.pdf" --data-binary @report.pdf
+
+# list my files with their status, then download one once it is CLEAN
+curl -b cookies.txt localhost:8080/api/v1/files
+curl -b cookies.txt -OJ localhost:8080/api/v1/files/<id>/content
+```
+
+| Endpoint | Meaning |
+|---|---|
+| `PUT /api/v1/files?name=` | Streams the body into quarantine. `202` with the file id once stored and queued for the scan; `411` without `Content-Length`; `413` above `app.upload.max-size-bytes` |
+| `GET /api/v1/files` | The files of the caller, newest first, with their status |
+| `GET /api/v1/files/{id}/content` | The content as an attachment. `409` unless the file is `CLEAN`; `404` for an unknown file **and** for the file of someone else |
+
+A file goes `UPLOADING`, `PENDING`, `SCANNING`, then `CLEAN` or `INFECTED` (or a failed state). To see an infected file, upload the EICAR test string, a harmless text every antivirus flags: `X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*`.
+
+The scan workers run inside the application (`app.worker.*` in `application.properties`: slots per queue, lease, polling delays). `WORKER_ENABLED=false` starts an instance that only serves requests.
+
 ## Tests
 
 | Command | What it runs | Docker |
@@ -85,6 +106,36 @@ The schema lives only in Flyway migrations (`src/main/resources/db/migration`). 
 ```bash
 mvn -Pjooq-codegen generate-sources
 ```
+
+## Design choices
+
+- **Hexagonal, feature-first.** Two bounded contexts, `auth` and `storage`, that never depend on each other (checked by ArchUnit); a pure-Java domain, handlers as the inbound API, adapters (jOOQ, S3, ClamAV, web) outside.
+- **Streaming everywhere.** The upload is read once from the servlet stream, hashed (SHA-256) and written to S3 (multipart above one part) without ever holding the file in memory; the size and the digest are measured by the server. Downloads stream from S3 to the response.
+- **Quarantine, then clean zone.** Content is stored in a quarantine bucket, scanned by ClamAV through its `INSTREAM` protocol, copied to a clean bucket, and only that bucket is ever served.
+- **Asynchronous scan with a database queue.** A scan job per file, claimed with `FOR UPDATE SKIP LOCKED`, two queues (small and large files) with their own workers, leases, retries with backoff, reapers for abandoned uploads and expired leases. No broker: PostgreSQL is enough at this scale and keeps the file and its job in one transaction.
+- **Audit trail.** Every state change of a file or a scan job appends an event (`storage.file_event`) in the same transaction, with its actor.
+- **Security.** JWT in HttpOnly SameSite=Strict cookies, BCrypt, revocable refresh tokens, account lock; every file belongs to an owner and someone else's file behaves as not found; ids are never trusted; downloads are opaque attachments.
+
+## Assumptions
+
+- Files go up to 2 GB; any type of content is accepted (documents, reports, exports), none is rendered by the service.
+- A file is served only once scanned and clean; the status is visible to its owner at any time.
+- A user only sees and downloads their own files. There is no sharing between users and no deletion yet.
+- The scan thresholds (queue split at 50 MB, leases, retries, slots, polling delays) are working hypotheses, not measured values.
+- The API is consumed from the same site as the interface (a reverse proxy or the dev proxy), which is what `SameSite=Strict` cookies require.
+- ClamAV runs as a service reachable over TCP; its signatures are updated by its own container.
+
+## Possible improvements
+
+- **Heartbeat** of running scans (one batched update per worker) and a **graceful shutdown** that releases the leases, instead of a long lease and the reaper.
+- **Verdict cache** keyed by SHA-256 and signature version (the table exists, see `ARCHITECTURE.md` section 6), and a re-scan of stored clean files after a signature update.
+- **Limits and quotas:** the maximum size enforced in the domain, a per-user cap on concurrent uploads and on stored bytes, a concurrency semaphore on the upload endpoint with `429` and `Retry-After`.
+- **Direct-to-S3 upload** with presigned multipart URLs for very large files, once a load test shows the application is the bottleneck.
+- **Load test** (k6 or Gatling) to calibrate the slots, the leases, the part size and the queue threshold; metrics and tracing around the queues and the scans.
+- **Deployment at scale:** several ClamAV instances behind one address (balanced per connection, ideally by least connections), separate `web` and `worker` instances (the same image with `WORKER_ENABLED` true or false today, Spring profiles later), and Prometheus metrics (`/actuator/prometheus` on every pod, aggregated at query time). See `ARCHITECTURE.md`, section 10.
+- **Adaptive capacity and runtime control:** slots shared between the queues (`SMALL` may borrow idle `LARGE` slots, not the reverse), scaling of the workers from the queue depth, and an administration role to pause or resume a queue, retry an exhausted job, cancel a running scan and see what runs. The slots are configuration today (`app.worker.small-slots`, `app.worker.large-slots`) and need a restart to change. See `ARCHITECTURE.md`, section 10.
+- **Content checks:** an allow-list of types, sniffing of the real type, and archive handling.
+- **Push instead of polling** (Server-Sent Events) for the file status, file deletion and retention, separate `web` and `worker` deployments.
 
 ## Documentation
 

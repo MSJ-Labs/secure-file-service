@@ -166,3 +166,23 @@ Decisions taken while building the storage application layer, its persistence an
 - A body longer than the declared size is refused with an explicit error as soon as the limit is passed (no `declaredSize + 1` trick); a shorter one is caught when the upload completes.
 - The scan copies the file to the clean zone before the verdict is recorded and clears the quarantine afterwards, so a crash can always be retried from the quarantine.
 ~~~~
+
+## Prompt 6
+
+~~~~text
+Decisions taken while building the worker runtime and the files API (author's answers and corrections, in order):
+
+### Scan worker runtime
+- The wait between two polls of a queue is a small immutable policy (`PollingPolicy`): no wait after a hit, a delay that doubles from a minimum to a maximum while the queue is empty, validated in its constructor like the other policies. Written test first, without real time.
+- One poll of one queue (`ScanQueueWorker`) takes all its free slots at once, claims at most that many jobs, hands each one to the scan and gives its slot back whatever happens. It never throws: a failing claim is a miss that backs off. Concurrency was reviewed explicitly (no lock held, no blocking acquire, atomic take of the permits, release in a `finally`).
+- The loop (`ScanQueueLoop`) takes its sleep as a parameter so it is tested without real time; an interruption is the shutdown signal. A flaky test (a stubbing unused when the test ended before the scan thread started) was fixed by waiting until the scans really started.
+- The workers run in the same process as the API, one loop per queue on virtual threads plus a maintenance loop that calls the two reapers (expired leases, expired uploads). `app.worker.enabled=false` gives an instance that only serves requests, and the API integration tests use it.
+- The heartbeat of running scans is not built for now: the lease is configured long enough for the longest expected scan (10 minutes), and the batched heartbeat and the graceful shutdown are kept as documented improvements.
+
+### Files API
+- The upload body is the file itself (raw `PUT` with the name as a query parameter) rather than multipart, so the servlet stream goes straight to the storage and the declared size comes from `Content-Length` (411 without it). Chosen after comparing both approaches.
+- The maximum size (`app.upload.max-size-bytes`) is a domain policy (`UploadSizePolicy`) checked first by the initiation, answering 413 through its own exception. The controller only reads what HTTP gives (the stream, the size from `Content-Length`, 411 when it is missing) and calls one handler, `ReceiveFileCommandHandler`, that chains the initiation and the streaming (decided after questioning the controller, which first held the limit and the orchestration).
+- Endpoints: `PUT /api/v1/files`, `GET /api/v1/files` (the files of the caller, newest first, with their status) and `GET /api/v1/files/{id}/content`. A file of someone else and a malformed id behave as not found; a file that is not CLEAN answers 409; the content is always an `application/octet-stream` attachment.
+- The scan-verdict cache keyed by SHA-256 stays a design only (the table exists, nothing reads it yet), documented in `ARCHITECTURE.md`.
+- The LocalStack bucket init script had to be made executable for the compose stack to become healthy.
+~~~~
