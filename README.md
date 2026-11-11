@@ -31,7 +31,7 @@ sed -i.bak "s|^TERRAFORM_CLIENT_SECRET=.*|TERRAFORM_CLIENT_SECRET=$(openssl rand
 docker compose up --build
 ```
 
-The app listens on `http://localhost:8080`. ClamAV downloads its signatures on first start and takes a couple of minutes to become ready; the app does not wait for it.
+The app listens on `http://localhost:8082` (not 8080, which trading-core uses). ClamAV downloads its signatures on first start and takes a couple of minutes to become ready; the app does not wait for it.
 
 If port 5432 is already used on your machine, change `POSTGRES_HOST_PORT` in `.env`.
 
@@ -67,7 +67,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 Get an access token from Keycloak (Swagger UI does it for you with the "Authorize" button, Authorization Code + PKCE), then send it as a Bearer token:
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/files
+curl -H "Authorization: Bearer $TOKEN" localhost:8082/api/v1/files
 ```
 
 Everything except `/actuator/health` and the OpenAPI documentation (`/swagger-ui/index.html`, `/v3/api-docs`) requires authentication.
@@ -76,11 +76,11 @@ Everything except `/actuator/health` and the OpenAPI documentation (`/swagger-ui
 
 ```bash
 # upload: the body is the file itself, the name is a query parameter (Content-Length is required)
-curl -H "Authorization: Bearer $TOKEN" -X PUT "localhost:8080/api/v1/files?name=report.pdf" --data-binary @report.pdf
+curl -H "Authorization: Bearer $TOKEN" -X PUT "localhost:8082/api/v1/files?name=report.pdf" --data-binary @report.pdf
 
 # list my files with their status, then download one once it is CLEAN
-curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/files
-curl -H "Authorization: Bearer $TOKEN" -OJ localhost:8080/api/v1/files/<id>/content
+curl -H "Authorization: Bearer $TOKEN" localhost:8082/api/v1/files
+curl -H "Authorization: Bearer $TOKEN" -OJ localhost:8082/api/v1/files/<id>/content
 ```
 
 | Endpoint | Meaning |

@@ -27,7 +27,7 @@ COPY --from=build --chown=app:app /extracted/snapshot-dependencies/ ./
 COPY --from=build --chown=app:app /extracted/application/ ./
 
 USER app
-EXPOSE 8080
+EXPOSE 8082
 
 # MaxRAMPercentage sizes the heap from the container limit. Direct memory (NIO, S3 and socket buffers)
 # is outside the heap, so it is capped explicitly: container limit >= heap + direct + metaspace + stacks.

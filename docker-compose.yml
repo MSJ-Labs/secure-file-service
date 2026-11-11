@@ -133,10 +133,10 @@ services:
     # The JVM sizes its heap from this limit (see the Dockerfile): 50% heap + 256 MB direct memory + overhead.
     mem_limit: 1g
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8082:8082"
     healthcheck:
       # The runtime image has no curl or wget, so use bash's /dev/tcp (dash, the default sh, has none).
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8082 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
       interval: 10s
       timeout: 5s
       retries: 6
