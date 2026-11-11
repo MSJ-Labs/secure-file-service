@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,7 +65,7 @@ class ReclaimExpiredLeasesCommandHandlerTest {
     }
 
     private static SecureFile scanningFile(long fileId) {
-        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(7L), "report.pdf", 1_000,
+        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(new UUID(0, 7)), "report.pdf", 1_000,
                 CLAIMED_AT, CLAIMED_AT.plusSeconds(3_600));
         file.completeUpload(Sha256.of("a".repeat(64)), 1_000, CLAIMED_AT);
         file.startScan(CLAIMED_AT);
@@ -125,7 +126,7 @@ class ReclaimExpiredLeasesCommandHandlerTest {
     }
 
     private static SecureFile waitingFile(long fileId) {
-        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(7L), "report.pdf", 1_000,
+        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(new UUID(0, 7)), "report.pdf", 1_000,
                 CLAIMED_AT, CLAIMED_AT.plusSeconds(3_600));
         file.completeUpload(Sha256.of("a".repeat(64)), 1_000, CLAIMED_AT);
         return file;

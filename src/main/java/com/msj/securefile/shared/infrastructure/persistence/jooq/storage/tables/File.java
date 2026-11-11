@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import org.jooq.Check;
 import org.jooq.Condition;
@@ -69,7 +70,7 @@ public class File extends TableImpl<FileRecord> {
     /**
      * The column <code>storage.file.owner_id</code>.
      */
-    public final TableField<FileRecord, Long> OWNER_ID = createField(DSL.name("owner_id"), SQLDataType.BIGINT.nullable(false), this, "");
+    public final TableField<FileRecord, UUID> OWNER_ID = createField(DSL.name("owner_id"), SQLDataType.UUID.nullable(false), this, "");
 
     /**
      * The column <code>storage.file.original_name</code>.

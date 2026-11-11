@@ -7,11 +7,22 @@ import com.msj.securefile.storage.domain.file.SecureFile;
 import com.msj.securefile.storage.domain.file.valueobject.FileId;
 import com.msj.securefile.support.LocalStackTestS3;
 import com.msj.securefile.support.PostgresTestDatabase;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import io.hypersistence.tsid.TSID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -21,9 +32,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.Date;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,9 +51,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "jwt.secret=test-only-secret-test-only-secret-test-only-secret-test-only-secret-0123456789",
-                "jwt.access-token-expiration-ms=900000",
-                "jwt.refresh-token-expiration-ms=604800000",
                 "app.storage.s3.access-key=test",
                 "app.storage.s3.secret-key=test",
                 "app.upload.max-size-bytes=1024",
@@ -48,9 +59,19 @@ import static org.assertj.core.api.Assertions.assertThat;
         })
 class FileApiIT {
 
-    private static final String PASSWORD = "password123";
+    // Stands for Keycloak: the app validates tokens signed with this key instead of fetching the realm's keys.
+    private static final KeyPair SIGNING_KEY = generateKey();
     private static final String CONTENT = "hello secure world";
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"");
+
+    @TestConfiguration
+    static class TestJwtDecoder {
+        @Bean
+        @Primary
+        JwtDecoder testJwtDecoder() {
+            return NimbusJwtDecoder.withPublicKey((RSAPublicKey) SIGNING_KEY.getPublic()).build();
+        }
+    }
 
     @DynamicPropertySource
     static void infrastructure(DynamicPropertyRegistry registry) {
@@ -73,8 +94,8 @@ class FileApiIT {
 
     // ----- helpers ---------------------------------------------------------------------------------------------
 
-    private HttpResponse<String> send(HttpRequest.Builder request, String cookie) throws Exception {
-        if (cookie != null) request.header("Cookie", cookie);
+    private HttpResponse<String> send(HttpRequest.Builder request, String token) throws Exception {
+        if (token != null) request.header("Authorization", "Bearer " + token);
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
@@ -82,17 +103,17 @@ class FileApiIT {
         return HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));
     }
 
-    private HttpResponse<String> upload(String name, String content, String cookie) throws Exception {
+    private HttpResponse<String> upload(String name, String content, String token) throws Exception {
         return send(request("/api/v1/files?name=" + name)
-                .PUT(HttpRequest.BodyPublishers.ofString(content)), cookie);
+                .PUT(HttpRequest.BodyPublishers.ofString(content)), token);
     }
 
-    private HttpResponse<String> list(String cookie) throws Exception {
-        return send(request("/api/v1/files").GET(), cookie);
+    private HttpResponse<String> list(String token) throws Exception {
+        return send(request("/api/v1/files").GET(), token);
     }
 
-    private HttpResponse<String> download(String id, String cookie) throws Exception {
-        return send(request("/api/v1/files/" + id + "/content").GET(), cookie);
+    private HttpResponse<String> download(String id, String token) throws Exception {
+        return send(request("/api/v1/files/" + id + "/content").GET(), token);
     }
 
     private static String idOf(HttpResponse<String> response) {
@@ -101,28 +122,26 @@ class FileApiIT {
         return matcher.group(1);
     }
 
-    // Registers a fresh user and returns the cookie header of its session.
-    private String newSession() throws Exception {
-        String username = "user" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        String register = """
-                {"username":"%s","email":"%s@example.com","password":"%s","firstName":"Jane","lastName":"Doe"}"""
-                .formatted(username, username, PASSWORD);
-        assertThat(http.send(request("/api/v1/auth/register").header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(register)).build(), HttpResponse.BodyHandlers.ofString())
-                .statusCode()).isEqualTo(201);
-        HttpResponse<String> login = http.send(request("/api/v1/auth/login").header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"username":"%s","password":"%s"}""".formatted(username, PASSWORD))).build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(login.statusCode()).isEqualTo(200);
-        Map<String, String> cookies = new LinkedHashMap<>();
-        login.headers().allValues("set-cookie").forEach(header -> {
-            String pair = header.substring(0, header.indexOf(';'));
-            cookies.put(pair.substring(0, pair.indexOf('=')), pair.substring(pair.indexOf('=') + 1));
-        });
-        StringBuilder cookie = new StringBuilder();
-        cookies.forEach((name, value) -> cookie.append(cookie.isEmpty() ? "" : "; ").append(name).append('=').append(value));
-        return cookie.toString();
+    private static KeyPair generateKey() {
+        try {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            return generator.generateKeyPair();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    // An access token for a fresh user, as Keycloak would issue it: the subject is the user's UUID.
+    private String newSession() throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject(UUID.randomUUID().toString())
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plusSeconds(300)))
+                .build();
+        SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
+        jwt.sign(new RSASSASigner(SIGNING_KEY.getPrivate()));
+        return jwt.serialize();
     }
 
     // What the worker does once the scan found nothing, with the same ports.

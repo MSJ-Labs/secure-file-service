@@ -56,9 +56,4 @@ public final class PostgresTestDatabase {
         DSL_CONTEXT.execute("DELETE FROM storage.file");
         DSL_CONTEXT.execute("DELETE FROM storage.file_event");
     }
-
-    /** Removes every account (and, by cascade, its roles and tokens). The seeded roles are kept. */
-    public static void deleteAllAccounts() {
-        DSL_CONTEXT.execute("DELETE FROM auth.user_account");
-    }
 }

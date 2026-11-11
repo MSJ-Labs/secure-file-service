@@ -2,7 +2,7 @@
 
 Secure file management microservice: files are uploaded (streamed, up to 2 GB) into a quarantine zone, scanned by ClamAV, and can be downloaded only once they are CLEAN. Each user can only access their own files.
 
-Status: authentication, streamed upload, asynchronous scan (workers) and download of clean files are implemented. A React interface lives in a separate repository, `secure-file-ui`. See `ARCHITECTURE.md` for the design.
+Status: authentication through Keycloak, streamed upload, asynchronous scan (workers) and download of clean files are implemented. A React interface lives in a separate repository, `secure-file-ui`. See `ARCHITECTURE.md` for the design.
 
 ## Prerequisites
 
@@ -24,10 +24,10 @@ mvn compile
 # 1. create your .env (git-ignored) from the template
 cp .env.example .env
 
-# 2. generate the JWT signing secret into it (works on macOS and Linux)
-sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')|" .env && rm .env.bak
+# 2. generate the Keycloak bootstrap secret into it (works on macOS and Linux)
+sed -i.bak "s|^TERRAFORM_CLIENT_SECRET=.*|TERRAFORM_CLIENT_SECRET=$(openssl rand -base64 32 | tr -d '\n')|" .env && rm .env.bak
 
-# 3. start PostgreSQL, LocalStack (S3), ClamAV and the app
+# 3. start PostgreSQL, LocalStack (S3), ClamAV, Keycloak and the app
 docker compose up --build
 ```
 
@@ -35,49 +35,52 @@ The app listens on `http://localhost:8080`. ClamAV downloads its signatures on f
 
 If port 5432 is already used on your machine, change `POSTGRES_HOST_PORT` in `.env`.
 
-### The JWT secret
+### Keycloak
 
-`JWT_SECRET` signs the access and refresh tokens (HS512). It must be at least 64 characters, it has no default on purpose, and the app (and `docker compose`) refuses to start without it. Never commit a real value: `.env` and `application-local.properties` are git-ignored. Changing it invalidates every token already issued. `openssl rand -base64 64` prints 88 characters.
+Authentication is delegated to Keycloak (`http://localhost:8180`), which starts with the compose file and has its own database. The service only validates the access tokens it issues. The realm `secure-file` (public PKCE clients `secure-file-ui` and `secure-file-dev-tools`, both adding the audience `secure-file-service` to the access token, roles `USER` and `ADMIN`) is created by Terraform from the `trading-infra` repository. Once Keycloak is healthy:
 
-`COOKIE_SECURE` defaults to `false` so cookies work over plain HTTP in local development. Set it to `true` behind HTTPS.
+```bash
+cd trading-infra/terraform/keycloak/envs/secure-file-dev
+export TF_VAR_terraform_client_secret="<TERRAFORM_CLIENT_SECRET from this .env>"
+terraform init && terraform apply -var-file=dev.tfvars
+```
+
+Until the realm exists, protected endpoints answer 401. Keycloak listens on port 8180: stop any other Keycloak (for example the one of trading-core) before starting this one.
+
+Generate the three secrets of `.env` with `openssl rand -base64 24` (the two passwords) and `openssl rand -base64 32` (`TERRAFORM_CLIENT_SECRET`). Change `KEYCLOAK_ADMIN_PASSWORD` and `KEYCLOAK_DB_PASSWORD` in `.env`; never commit a real value.
 
 ### Running the app outside Docker
 
 Start only the infrastructure, then run the app from your IDE or Maven:
 
 ```bash
-docker compose up -d postgres localstack clamav
+docker compose up -d postgres localstack clamav keycloak-db keycloak
 
 cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
-# edit it: set jwt.secret (openssl rand -base64 64) and make the other values match your .env
+# edit it: make the values match your .env
 
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 ### Trying the authentication
 
-```bash
-# register, then log in (the tokens are returned as HttpOnly cookies, not in the body)
-curl -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
-  -d '{"username":"alice","email":"alice@example.com","password":"password123"}'
-curl -c cookies.txt -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
-  -d '{"username":"alice","password":"password123"}'
+Get an access token from Keycloak (Swagger UI does it for you with the "Authorize" button, Authorization Code + PKCE), then send it as a Bearer token:
 
-# current user (uses the access_token cookie)
-curl -b cookies.txt localhost:8080/api/v1/users/me
+```bash
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/files
 ```
 
-Other endpoints: `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`. Everything except `/api/v1/auth/**`, `/actuator/health` and the OpenAPI documentation (`/swagger-ui/index.html`, `/v3/api-docs`) requires authentication.
+Everything except `/actuator/health` and the OpenAPI documentation (`/swagger-ui/index.html`, `/v3/api-docs`) requires authentication.
 
 ### Trying the files
 
 ```bash
 # upload: the body is the file itself, the name is a query parameter (Content-Length is required)
-curl -b cookies.txt -X PUT "localhost:8080/api/v1/files?name=report.pdf" --data-binary @report.pdf
+curl -H "Authorization: Bearer $TOKEN" -X PUT "localhost:8080/api/v1/files?name=report.pdf" --data-binary @report.pdf
 
 # list my files with their status, then download one once it is CLEAN
-curl -b cookies.txt localhost:8080/api/v1/files
-curl -b cookies.txt -OJ localhost:8080/api/v1/files/<id>/content
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/files
+curl -H "Authorization: Bearer $TOKEN" -OJ localhost:8080/api/v1/files/<id>/content
 ```
 
 | Endpoint | Meaning |
@@ -109,12 +112,12 @@ mvn -Pjooq-codegen generate-sources
 
 ## Design choices
 
-- **Hexagonal, feature-first.** Two bounded contexts, `auth` and `storage`, that never depend on each other (checked by ArchUnit); a pure-Java domain, handlers as the inbound API, adapters (jOOQ, S3, ClamAV, web) outside.
+- **Hexagonal, feature-first.** One bounded context, `storage` (identity is delegated to Keycloak); a pure-Java domain, handlers as the inbound API, adapters (jOOQ, S3, ClamAV, web) outside.
 - **Streaming everywhere.** The upload is read once from the servlet stream, hashed (SHA-256) and written to S3 (multipart above one part) without ever holding the file in memory; the size and the digest are measured by the server. Downloads stream from S3 to the response.
 - **Quarantine, then clean zone.** Content is stored in a quarantine bucket, scanned by ClamAV through its `INSTREAM` protocol, copied to a clean bucket, and only that bucket is ever served.
 - **Asynchronous scan with a database queue.** A scan job per file, claimed with `FOR UPDATE SKIP LOCKED`, two queues (small and large files) with their own workers, leases, retries with backoff, reapers for abandoned uploads and expired leases. No broker: PostgreSQL is enough at this scale and keeps the file and its job in one transaction.
 - **Audit trail.** Every state change of a file or a scan job appends an event (`storage.file_event`) in the same transaction, with its actor.
-- **Security.** JWT in HttpOnly SameSite=Strict cookies, BCrypt, revocable refresh tokens, account lock; every file belongs to an owner and someone else's file behaves as not found; ids are never trusted; downloads are opaque attachments.
+- **Security.** Keycloak access tokens validated as an OAuth2 resource server (Bearer header, no cookies); every file belongs to an owner and someone else's file behaves as not found; ids are never trusted; downloads are opaque attachments.
 
 ## Assumptions
 
@@ -122,7 +125,7 @@ mvn -Pjooq-codegen generate-sources
 - A file is served only once scanned and clean; the status is visible to its owner at any time.
 - A user only sees and downloads their own files. There is no sharing between users and no deletion yet.
 - The scan thresholds (queue split at 50 MB, leases, retries, slots, polling delays) are working hypotheses, not measured values.
-- The API is consumed from the same site as the interface (a reverse proxy or the dev proxy), which is what `SameSite=Strict` cookies require.
+- The interface logs users in with Keycloak (Authorization Code + PKCE) and calls the API with the access token.
 - ClamAV runs as a service reachable over TCP; its signatures are updated by its own container.
 
 ## Possible improvements

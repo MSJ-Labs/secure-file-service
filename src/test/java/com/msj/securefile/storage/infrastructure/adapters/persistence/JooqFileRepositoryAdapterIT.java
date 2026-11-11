@@ -19,6 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static com.msj.securefile.shared.infrastructure.persistence.jooq.storage.Tables.FILE_EVENT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,8 +30,8 @@ class JooqFileRepositoryAdapterIT {
 
     private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
     private static final Instant LATER = NOW.plusSeconds(60);
-    private static final OwnerId OWNER = OwnerId.of(7L);
-    private static final OwnerId OTHER_OWNER = OwnerId.of(8L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
+    private static final OwnerId OTHER_OWNER = OwnerId.of(new UUID(0, 8));
     private static final Actor USER = new Actor.User(OWNER);
     private static final Actor SYSTEM = new Actor.System();
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));

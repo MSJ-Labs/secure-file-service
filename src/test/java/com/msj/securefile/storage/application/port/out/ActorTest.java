@@ -3,6 +3,7 @@ package com.msj.securefile.storage.application.port.out;
 import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
 import com.msj.securefile.storage.domain.scan.valueobject.WorkerId;
 import org.junit.jupiter.api.Test;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,7 +12,7 @@ class ActorTest {
 
     @Test
     void user_isIdentifiedByItsOwnerId() {
-        assertThat(new Actor.User(OwnerId.of(7L))).isEqualTo(new Actor.User(OwnerId.of(7L)));
+        assertThat(new Actor.User(OwnerId.of(new UUID(0, 7)))).isEqualTo(new Actor.User(OwnerId.of(new UUID(0, 7))));
     }
 
     @Test

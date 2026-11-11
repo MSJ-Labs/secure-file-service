@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -64,7 +65,7 @@ class ReleaseScanCommandHandlerTest {
     }
 
     private static SecureFile scanningFile() {
-        SecureFile file = SecureFile.initiate(FILE_ID, OwnerId.of(7L), "report.pdf", 1_000,
+        SecureFile file = SecureFile.initiate(FILE_ID, OwnerId.of(new UUID(0, 7)), "report.pdf", 1_000,
                 CLAIMED_AT, CLAIMED_AT.plusSeconds(3_600));
         file.completeUpload(Sha256.of("a".repeat(64)), 1_000, CLAIMED_AT);
         file.startScan(CLAIMED_AT);

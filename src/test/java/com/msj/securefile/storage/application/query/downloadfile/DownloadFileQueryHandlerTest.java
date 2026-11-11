@@ -21,6 +21,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,7 +34,7 @@ import static org.mockito.Mockito.when;
 class DownloadFileQueryHandlerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     private static final FileId FILE_ID = FileId.of(42L);
     private static final DownloadFileQuery QUERY = new DownloadFileQuery(FILE_ID);
 

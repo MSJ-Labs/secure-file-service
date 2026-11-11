@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,7 +28,7 @@ class SecureFileEventsTest {
     private static final Instant SCAN_START = NOW.plusSeconds(60);
     private static final Instant VERDICT_AT = NOW.plusSeconds(120);
     private static final FileId ID = FileId.of(42L);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
     private static final String SIGNATURE = "Win.Test.EICAR_HDB-1";
 

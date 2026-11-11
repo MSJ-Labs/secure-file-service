@@ -23,6 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static com.msj.securefile.shared.infrastructure.persistence.jooq.storage.Tables.FILE_EVENT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +33,7 @@ class FileEventWriterIT {
 
     private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
     private static final FileId FILE_ID = FileId.of(42L);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     private static final Actor USER = new Actor.User(OWNER);
 
     private final DSLContext dsl = PostgresTestDatabase.dsl();

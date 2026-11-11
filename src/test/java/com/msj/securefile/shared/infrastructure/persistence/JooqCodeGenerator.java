@@ -22,7 +22,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 public final class JooqCodeGenerator {
 
-    public static final String TARGET_PACKAGE = "com.msj.securefile.shared.infrastructure.persistence.jooq";
+    public static final String TARGET_PACKAGE = "com.msj.securefile.shared.infrastructure.persistence.jooq.storage";
 
     // Same major version as docker-compose.yml, so the generated code matches the runtime database.
     private static final String POSTGRES_IMAGE = "postgres:18.6";
@@ -60,9 +60,7 @@ public final class JooqCodeGenerator {
                                 .withName("org.jooq.meta.postgres.PostgresDatabase")
                                 // One schema per bounded context, nothing in public. Kept in the output
                                 // (no "default schema" flattening) so every query is schema-qualified.
-                                .withSchemata(
-                                        new SchemaMappingType().withInputSchema("storage"),
-                                        new SchemaMappingType().withInputSchema("auth"))
+                                .withSchemata(new SchemaMappingType().withInputSchema("storage"))
                                 // The application works with Instant (injected Clock), not OffsetDateTime.
                                 .withForcedTypes(new ForcedType()
                                         .withName("INSTANT")

@@ -7,6 +7,7 @@ package com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
@@ -37,15 +38,15 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> {
     /**
      * Setter for <code>storage.file.owner_id</code>.
      */
-    public void setOwnerId(Long value) {
+    public void setOwnerId(UUID value) {
         set(1, value);
     }
 
     /**
      * Getter for <code>storage.file.owner_id</code>.
      */
-    public Long getOwnerId() {
-        return (Long) get(1);
+    public UUID getOwnerId() {
+        return (UUID) get(1);
     }
 
     /**
@@ -211,7 +212,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> {
     /**
      * Create a detached, initialised FileRecord
      */
-    public FileRecord(Long id, Long ownerId, String originalName, Long sizeBytes, String sha256, String status, Instant uploadExpiresAt, String failureReason, String infectionSignature, Long version, Instant createdAt, Instant updatedAt) {
+    public FileRecord(Long id, UUID ownerId, String originalName, Long sizeBytes, String sha256, String status, Instant uploadExpiresAt, String failureReason, String infectionSignature, Long version, Instant createdAt, Instant updatedAt) {
         super(File.FILE);
 
         setId(id);

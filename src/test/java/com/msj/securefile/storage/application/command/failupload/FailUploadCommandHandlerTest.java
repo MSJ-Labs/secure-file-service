@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,7 +38,7 @@ class FailUploadCommandHandlerTest {
     private static final Instant STARTED = Instant.parse("2026-10-04T10:00:00Z");
     private static final Instant NOW = STARTED.plusSeconds(30);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);
 
