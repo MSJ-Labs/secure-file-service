@@ -33,7 +33,6 @@
         <hypersistence-tsid.version>2.1.4</hypersistence-tsid.version>
         <archunit.version>1.5.1</archunit.version>
         <awssdk.version>2.55.8</awssdk.version>
-        <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>3.1.1</springdoc.version>
         <jacoco.version>0.8.15</jacoco.version>
         <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
@@ -129,7 +128,7 @@
             <version>${mapstruct.version}</version>
         </dependency>
 
-        <!-- Authentication: Spring Security, request validation, JWT -->
+        <!-- Spring Security as an OAuth2 resource server (Keycloak tokens), request validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
@@ -139,21 +138,8 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-            <version>${jjwt.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>${jjwt.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>${jjwt.version}</version>
-            <scope>runtime</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
         </dependency>
 
         <!-- OpenAPI documentation (springdoc 3.x is the line for Spring Boot 4) -->
@@ -167,6 +153,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

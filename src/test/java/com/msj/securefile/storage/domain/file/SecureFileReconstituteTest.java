@@ -7,6 +7,7 @@ import com.msj.securefile.storage.domain.file.valueobject.Sha256;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,7 +19,7 @@ class SecureFileReconstituteTest {
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
     private static final String SIGNATURE = "Win.Test.EICAR_HDB-1";
     private static final FileId ID = FileId.of(42L);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
 
     private static SecureFile storedInfectedFile() {
         return SecureFile.reconstitute(new FileSnapshot(ID, OWNER, "report.pdf", 1_024, FileStatus.INFECTED, DIGEST,

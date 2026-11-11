@@ -8,7 +8,7 @@ import java.time.Clock;
 @Configuration
 public class ClockConfig {
 
-    // UTC everywhere: the auth tables store zone-less TIMESTAMPs, so one fixed zone keeps them comparable.
+    // UTC everywhere: one fixed zone keeps the stored instants comparable.
     @Bean
     Clock clock() {
         return Clock.systemUTC();

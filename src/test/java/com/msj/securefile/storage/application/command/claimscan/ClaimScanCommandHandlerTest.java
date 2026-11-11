@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -68,7 +69,7 @@ class ClaimScanCommandHandlerTest {
     }
 
     private static SecureFile pendingFile(long fileId) {
-        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(7L), "report.pdf", 1_000,
+        SecureFile file = SecureFile.initiate(FileId.of(fileId), OwnerId.of(new UUID(0, 7)), "report.pdf", 1_000,
                 CREATED, CREATED.plusSeconds(3_600));
         file.completeUpload(Sha256.of("a".repeat(64)), 1_000, CREATED);
         return file;

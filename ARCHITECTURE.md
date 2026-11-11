@@ -37,14 +37,6 @@ The layout is feature-first: one package per bounded context, each split in the 
 
 ```
 com.msj.securefile
-├── auth                          implemented: registration, login, refresh, logout, profile
-│   ├── domain                    pure Java: User aggregate, UserId, token hashing, domain exceptions
-│   ├── application               command/query handlers, result objects (UserProfile)
-│   │   └── port.out              UserRepository, RefreshTokenRepository, PasswordHasher, TokenService
-│   ├── api                       inbound web adapter: controllers, DTOs, AuthExceptionHandler
-│   └── infrastructure
-│       ├── adapters.persistence  jOOQ repositories
-│       └── security              JWT provider, cookies, filter, BCrypt hasher
 ├── storage                       file upload, quarantine, scan: domain, application and infrastructure implemented
 │   │                             (see "Storage domain" below); the api and the worker runtime are planned
 │   ├── application               command/query handlers, result objects
@@ -54,38 +46,35 @@ com.msj.securefile
 │       └── adapters              persistence (jOOQ, audit), storage (S3), scanner (ClamAV), id, security
 ├── shared
 │   ├── domain                    DDD building blocks: AggregateRoot, VersionedAggregateRoot, Entity, ValueObject, DomainEvent
-│   └── infrastructure.persistence.jooq   generated jOOQ code (committed), one package per schema
+│   └── infrastructure.persistence.jooq.storage   generated jOOQ code (committed)
 └── config                        Spring configuration (security, OpenAPI, Clock)
 ```
 
-The handlers are the inbound API of the application layer: controllers call them directly, so there are no `*UseCase` interfaces (a single implementation per operation, no second adapter that needs the abstraction). Handlers return result objects, never domain entities. The outbound side is ports (`port.out`) implemented by infrastructure: persistence, password hashing and token issuing are all behind interfaces owned by `application`.
+The handlers are the inbound API of the application layer: controllers call them directly, so there are no `*UseCase` interfaces (a single implementation per operation, no second adapter that needs the abstraction). Handlers return result objects, never domain entities. The outbound side is ports (`port.out`) implemented by infrastructure: persistence, object storage and scanning are all behind interfaces owned by `application`.
 
 Rules (ArchUnit, `ArchitectureTest`, see `CLAUDE.md`):
 - `domain` depends on neither Spring nor jOOQ (nor any framework). Only `hypersistence-tsid` and Lombok (restricted) are allowed.
-- `application` depends only on `domain`, plus `@Service` and `@Transactional` from Spring and SLF4J. Moving those two annotations out would need a wiring class per handler and a hand-made transaction proxy (including the `noRollbackFor` of the login, which must keep failed attempts), for no gain in testability: handlers are tested with plain constructors and Mockito.
+- `application` depends only on `domain`, plus `@Service` and `@Transactional` from Spring and SLF4J. Moving those two annotations out would need a wiring class per handler and a hand-made transaction proxy for no gain in testability: handlers are tested with plain constructors and Mockito.
 - `domain` and `application` never depend on `infrastructure`, `api` or `config`. jOOQ types stay in `infrastructure`.
-- No Lombok builder or setter in `domain` and `application`; aggregates use factory methods (`register`, `reconstitute`).
-- A `valueobject` package holds only classes that implement `shared.domain.ValueObject`, and every such class lives in a `valueobject` package (storage today; `auth` still has to follow).
+- No Lombok builder or setter in `domain` and `application`; aggregates use factory methods (`initiate`, `reconstitute`).
+- A `valueobject` package holds only classes that implement `shared.domain.ValueObject`, and every such class lives in a `valueobject` package (storage).
 
 Ports:
 - `FileStoragePort`: two logical zones, `QUARANTINE` and `CLEAN`. Operations are stream-based: `store` (writes the body, reports the size and the SHA-256 it measured while reading, and never reads past a limit it is given), `open`, `promote` (copy quarantine -> clean, the quarantine is cleared only after the verdict is recorded so a crash can be retried) and `delete` (already gone is not an error). The domain has no notion of buckets: the S3 adapter maps zones to buckets and names objects by file id, never by user-supplied name. A body longer than the limit stops the write and keeps nothing (`UploadTooLargeException`), a failing read of the body is `UploadInterruptedException`, a failing write is `FileStorageException`.
 - `VirusScanner`: scans a stream and returns a verdict. A scanner that cannot be reached (`ScannerUnavailableException`) says nothing about the file and the job is released without consuming an attempt; a scan that does not complete (`ScanExecutionException`) counts as an attempt.
-- `CurrentUserProvider`: returns the caller as an `OwnerId`. Its adapter reads the security context through `shared.infrastructure.security.AuthenticatedPrincipal` (the access token carries the user id in a `uid` claim), so neither `auth` nor `storage` knows the other's types; ArchUnit enforces it. It fails closed for anything that cannot tell its id, the anonymous user included.
+- `CurrentUserProvider`: returns the caller as an `OwnerId`. Its adapter reads the caller through `shared.infrastructure.security.CurrentAuthenticatedPrincipal`, whose `userId()` is the Keycloak `sub`: the storage context never sees Spring Security types. It fails closed for anything that cannot tell its id, the anonymous user included.
 - `FileRepository` and `ScanJobRepository`: `save` and `saveAll` take the `Actor` (user, worker or system) the change is made by and write the state and its audit events together. `findByIdAndOwner` is the only lookup by caller: there is no `findById` for a user request, so no handler can forget the ownership check.
 
-Authentication: JWT (HS512) in HttpOnly SameSite=Strict `access_token` and `refresh_token` cookies. Refresh tokens are stored as hashes and can be revoked. Five failed logins lock the account for 30 minutes. Unknown user, disabled account and wrong password return the same 401 (`Invalid credentials`); domain exceptions carry fixed messages and `AuthExceptionHandler` maps them to RFC 9457 problem details. The clock is injected (`Clock` bean, UTC) and handed to the domain as a parameter.
-
-Refresh: `POST /api/v1/auth/refresh` checks the JWT signature and expiry, then that the stored hash is neither revoked nor expired, then loads the account: a missing, disabled or locked account gets no new access token, and the roles of the new token come from the account, not from the refresh token. Only the access token is renewed.
+Authentication: delegated to Keycloak (same design as the trading-core project). The service is an OAuth2 resource server: it validates the access token sent as `Authorization: Bearer` (signature through the realm's JWKS, issuer, audience `secure-file-service`, expiry) and maps the realm roles (`realm_access.roles`, Keycloak built-in roles ignored) to `ROLE_*` authorities. The keys are fetched lazily, so the app starts while Keycloak is down (protected endpoints answer 401 until it is reachable). There is no login, registration, password, refresh token or cookie in this service, so CSRF protection is off: nothing authenticates through a cookie. The realm, the API client and the public PKCE client (`secure-file-dev-tools`, used by Swagger UI) are provisioned by Terraform in the `trading-infra` repository, and Keycloak runs in the compose file with its own database. Unauthenticated calls get a 401.
 
 Known limits of the authentication (accepted for now):
-- Refresh tokens are not rotated: a stolen one stays usable until it expires (7 days) or the user logs out. Rotation needs reuse detection and handling of concurrent refreshes.
-- `revokeAllByUserId` exists but nothing calls it yet; it becomes useful with password change or account disabling.
 - Swagger UI and `/v3/api-docs` are public.
-- Registration checks then inserts: two concurrent registrations of the same username are stopped by the unique constraint (a 500 instead of a 409 in that race).
+- The token is validated offline: a revoked session stays valid until its access token expires (the token lifetime is configured in the realm).
+- The audience check needs the realm to add `secure-file-service` to the access tokens of the clients that call the API.
 
-Ownership: `SecureFile` carries its `owner: OwnerId` (the storage context's own type, no dependency on `auth`). Repositories and use cases always query with the caller's identity, so a foreign file is indistinguishable from a missing one (no IDOR).
+Ownership: `SecureFile` carries its `owner: OwnerId` (the storage context's own type, wrapping the Keycloak `sub`). Repositories and use cases always query with the caller's identity, so a foreign file is indistinguishable from a missing one (no IDOR).
 
-IDs are TSIDs (`UserId`, `FileId`, `OwnerId`, `ScanJobId` wrap a `TSID`), stored as `BIGINT`, generated by the application behind an `IdGenerator` port (never a database sequence or auto-increment), exposed as strings in the API.
+IDs are TSIDs (`FileId`, `ScanJobId` wrap a `TSID`; `OwnerId` is the Keycloak `sub`, a UUID), stored as `BIGINT`, generated by the application behind an `IdGenerator` port (never a database sequence or auto-increment), exposed as strings in the API.
 
 ### Storage domain (implemented, pure Java)
 
@@ -111,7 +100,7 @@ storage/domain/scan/exception/     LeaseLostException, InvalidScanJobTransitionE
 ## 3. Persistence
 
 - PostgreSQL with jOOQ. No JPA/Hibernate.
-- ALL DDL is in Flyway migrations (`src/main/resources/db/migration`). One schema per bounded context (`storage` for files and scans, `auth` for accounts and tokens), nothing in `public`. The contexts do not reference each other: a file's `owner_id` is a plain column, not a foreign key to `auth`.
+- ALL DDL is in Flyway migrations (`src/main/resources/db/migration`). One schema per bounded context (`storage` for files and scans), nothing in `public`. A file's `owner_id` is the Keycloak `sub` (UUID), a plain column: users live in the identity provider, there is no user table.
 - jOOQ code is generated from the migrations against a Testcontainers PostgreSQL and **committed** under `shared.infrastructure.persistence.jooq`. Reason: the project must compile on a machine without Docker. The `jooq-codegen` Maven profile regenerates it (needs Docker). A test checks that the committed code matches the migrations, so drift fails the build. Generated code is excluded from JaCoCo.
 - MapStruct is used in `infrastructure` only (DTO <-> command, jOOQ record <-> domain).
 

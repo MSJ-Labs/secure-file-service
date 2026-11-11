@@ -4,7 +4,6 @@
 package com.msj.securefile.shared.infrastructure.persistence.jooq.storage;
 
 
-import com.msj.securefile.shared.infrastructure.persistence.jooq.DefaultCatalog;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.File;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.FileEvent;
 import com.msj.securefile.shared.infrastructure.persistence.jooq.storage.tables.ScanJob;

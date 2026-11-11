@@ -20,6 +20,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
 import java.util.stream.Stream;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,7 +30,7 @@ class AuditEventMapperFileEventsTest {
 
     private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
     private static final FileId FILE_ID = FileId.of(42L);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
 
     private final AuditEventMapper mapper = new AuditEventMapper();
 

@@ -24,6 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static com.msj.securefile.shared.infrastructure.persistence.jooq.storage.Tables.FILE_EVENT;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,8 +52,8 @@ class JooqScanJobRepositoryAdapterIT {
 
     // A job belongs to a file (foreign key, one job per file): the file row has to exist first.
     private ScanJob newJob(long id, ScanQueue queue, Instant createdAt) {
-        files.save(SecureFile.initiate(FileId.of(id), OwnerId.of(7L), "report.pdf", 1_024, NOW, NOW.plusSeconds(3_600)),
-                new Actor.User(OwnerId.of(7L)));
+        files.save(SecureFile.initiate(FileId.of(id), OwnerId.of(new UUID(0, 7)), "report.pdf", 1_024, NOW, NOW.plusSeconds(3_600)),
+                new Actor.User(OwnerId.of(new UUID(0, 7))));
         return ScanJob.create(ScanJobId.of(id), FileId.of(id), queue, createdAt);
     }
 

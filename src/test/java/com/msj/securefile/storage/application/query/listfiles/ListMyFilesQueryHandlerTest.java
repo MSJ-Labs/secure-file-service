@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -23,7 +24,7 @@ import static org.mockito.Mockito.when;
 class ListMyFilesQueryHandlerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-04T10:00:00Z");
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
 
     @Mock FileRepository fileRepository;
     @Mock CurrentUserProvider currentUserProvider;

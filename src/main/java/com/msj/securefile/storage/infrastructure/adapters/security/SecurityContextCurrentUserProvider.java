@@ -1,11 +1,10 @@
 package com.msj.securefile.storage.infrastructure.adapters.security;
 
-import com.msj.securefile.shared.infrastructure.security.AuthenticatedPrincipal;
+import com.msj.securefile.shared.infrastructure.security.CurrentAuthenticatedPrincipal;
 import com.msj.securefile.storage.application.port.out.CurrentUserProvider;
 import com.msj.securefile.storage.domain.file.valueobject.OwnerId;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,14 +12,15 @@ import org.springframework.stereotype.Component;
  * say who the caller is, the anonymous user included, is refused rather than guessed.
  */
 @Component
+@RequiredArgsConstructor
 public class SecurityContextCurrentUserProvider implements CurrentUserProvider {
+
+    private final CurrentAuthenticatedPrincipal currentPrincipal;
 
     @Override
     public OwnerId currentOwner() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof AuthenticatedPrincipal principal) {
-            return OwnerId.of(principal.id());
-        }
-        throw new AuthenticationCredentialsNotFoundException("No authenticated user.");
+        return currentPrincipal.get()
+                .map(principal -> OwnerId.of(principal.userId()))
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("No authenticated user."));
     }
 }

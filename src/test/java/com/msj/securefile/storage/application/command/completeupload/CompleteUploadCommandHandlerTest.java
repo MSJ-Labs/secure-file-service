@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,7 +46,7 @@ class CompleteUploadCommandHandlerTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     // Round threshold so that 1_000 is SMALL and 1_001 is LARGE.
     private static final ScanQueuePolicy QUEUE_POLICY = new ScanQueuePolicy(1_000);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     // Both the file and its new scan job are written on behalf of the caller.
     private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);

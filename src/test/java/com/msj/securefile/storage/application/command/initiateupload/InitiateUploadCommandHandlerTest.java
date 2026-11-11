@@ -23,6 +23,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,7 +41,7 @@ class InitiateUploadCommandHandlerTest {
     // 60 s + 1 MiB at 1 MiB/s = 61 s: round numbers for the deadline assertion.
     private static final UploadTimeoutPolicy POLICY = new UploadTimeoutPolicy(Duration.ofSeconds(60), 1_048_576);
     private static final UploadSizePolicy SIZE_LIMIT = new UploadSizePolicy(10_485_760);
-    private static final OwnerId OWNER = OwnerId.of(7L);
+    private static final OwnerId OWNER = OwnerId.of(new UUID(0, 7));
     // The audit trail records who started the upload: the caller.
     private static final Actor ACTOR = new Actor.User(OWNER);
     private static final FileId FILE_ID = FileId.of(42L);

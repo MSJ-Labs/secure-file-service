@@ -1,8 +1,7 @@
 # Copy to application-local.properties (git-ignored) and run with --spring.profiles.active=local.
 # Values match the defaults of docker-compose.yml / .env.example.
-# Generate a secret with: openssl rand -base64 64
 
-jwt.secret=REPLACE_WITH_YOUR_SECRET
+app.security.oauth2.issuer-uri=http://localhost:8180/realms/secure-file
 
 spring.datasource.url=jdbc:postgresql://localhost:5432/training
 spring.datasource.username=postgres

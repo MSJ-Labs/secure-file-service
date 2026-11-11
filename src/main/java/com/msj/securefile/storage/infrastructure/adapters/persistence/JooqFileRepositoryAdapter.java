@@ -93,7 +93,7 @@ public class JooqFileRepositoryAdapter implements FileRepository {
             SecureFile file = change.file();
             insert = insert.values(
                     file.id().value().toLong(),
-                    file.getOwner().value().toLong(),
+                    file.getOwner().value(),
                     file.getName(),
                     file.getDeclaredSize(),
                     file.getSha256().map(Sha256::value).orElse(null),
@@ -152,7 +152,7 @@ public class JooqFileRepositoryAdapter implements FileRepository {
     public Optional<SecureFile> findByIdAndOwner(FileId id, OwnerId owner) {
         return dsl.selectFrom(FILE)
                 .where(FILE.ID.eq(id.value().toLong()))
-                .and(FILE.OWNER_ID.eq(owner.value().toLong()))
+                .and(FILE.OWNER_ID.eq(owner.value()))
                 .fetchOptional(this::toFile);
     }
 
@@ -161,7 +161,7 @@ public class JooqFileRepositoryAdapter implements FileRepository {
     public List<SecureFile> findAllByOwner(OwnerId owner) {
         // The id breaks ties between files created at the same instant: the order stays stable from one call to the next.
         return dsl.selectFrom(FILE)
-                .where(FILE.OWNER_ID.eq(owner.value().toLong()))
+                .where(FILE.OWNER_ID.eq(owner.value()))
                 .orderBy(FILE.CREATED_AT.desc(), FILE.ID.desc())
                 .fetch(this::toFile);
     }

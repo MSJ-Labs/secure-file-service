@@ -57,6 +57,55 @@ services:
       # First start downloads the signatures, which takes minutes.
       start_period: 5m
 
+  # ---------- Identity (Keycloak) ----------
+
+  # Dedicated database for Keycloak: the identity provider has its own lifecycle and must never share a schema or
+  # credentials with the application database.
+  keycloak-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set it in .env}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.0
+    # start-dev: HTTP allowed, relaxed hostname checks. No realm import: the realm, its clients and roles are created
+    # by Terraform (repo trading-infra, terraform/keycloak), so Keycloak keeps generating its own built-in scopes.
+    command: start-dev
+    ports:
+      - "127.0.0.1:8180:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set it in .env}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set it in .env}
+      # The public URL, as seen by the browser. It becomes the "iss" claim of every token.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HEALTH_ENABLED: "true"
+      # Service account of the master realm that Terraform uses to create the realm (Keycloak 26.1+).
+      KC_BOOTSTRAP_ADMIN_CLIENT_ID: terraform
+      KC_BOOTSTRAP_ADMIN_CLIENT_SECRET: ${TERRAFORM_CLIENT_SECRET:?set it in .env}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      # The image ships neither curl nor wget: raw HTTP over bash /dev/tcp on the management port (9000).
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   app:
     build: .
     depends_on:
@@ -64,6 +113,7 @@ services:
         condition: service_healthy
       localstack:
         condition: service_healthy
+      # No dependency on keycloak: the keys are fetched lazily, protected endpoints answer 401 until it is up.
       # No dependency on clamav: it takes minutes to be ready and the scan queue already handles it being down.
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -75,8 +125,9 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?set it in .env}
       S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-quarantine}
       S3_CLEAN_BUCKET: ${S3_CLEAN_BUCKET:-clean}
-      JWT_SECRET: ${JWT_SECRET:?generate one, see README (Quickstart)}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # The issuer is the public URL (it must equal the token's "iss"), the keys are fetched on the compose network.
+      KEYCLOAK_ISSUER_URI: http://localhost:8180/realms/secure-file
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/secure-file/protocol/openid-connect/certs
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
     # The JVM sizes its heap from this limit (see the Dockerfile): 50% heap + 256 MB direct memory + overhead.
@@ -94,3 +145,4 @@ services:
 volumes:
   postgres-data:
   clamav-signatures:
+  keycloak-db-data:

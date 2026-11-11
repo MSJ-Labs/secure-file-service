@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
 import java.util.stream.Stream;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,7 +21,7 @@ class SecureFileUploadGuardTest {
     private static final Sha256 DIGEST = Sha256.of("a".repeat(64));
 
     private static SecureFile uploading() {
-        return SecureFile.initiate(FileId.of(42L), OwnerId.of(7L), "report.pdf", 1_000, NOW, NOW.plusSeconds(3_600));
+        return SecureFile.initiate(FileId.of(42L), OwnerId.of(new UUID(0, 7)), "report.pdf", 1_000, NOW, NOW.plusSeconds(3_600));
     }
 
     private static SecureFile pending() {
